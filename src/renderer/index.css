@@ -1,7 +1,38 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-:root {
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --background: oklch(0.19 0.014 252);
+  --foreground: oklch(0.93 0.008 252);
+  --card: oklch(0.24 0.012 252 / 0.98);
+  --card-foreground: oklch(0.93 0.008 252);
+  --popover: oklch(0.24 0.012 252 / 0.98);
+  --popover-foreground: oklch(0.93 0.008 252);
+  --primary: oklch(0.7 0.125 248);
+  --primary-foreground: oklch(0.18 0.015 252);
+  --secondary: oklch(0.29 0.013 252);
+  --secondary-foreground: oklch(0.91 0.008 252);
+  --muted: oklch(0.28 0.011 252);
+  --muted-foreground: oklch(0.7 0.012 252);
+  --accent: oklch(0.31 0.018 248);
+  --accent-foreground: oklch(0.95 0.008 252);
+  --destructive: oklch(0.69 0.17 24);
+  --destructive-foreground: oklch(0.97 0.01 24);
+  --border: oklch(0.34 0.012 252);
+  --input: oklch(0.32 0.012 252);
+  --ring: oklch(0.71 0.128 248 / 0.35);
+  --radius: 0.8rem;
+  --surface-chrome: oklch(0.2 0.012 252 / 0.96);
+  --surface-activity: oklch(0.23 0.014 252 / 0.98);
+  --surface-sidebar: oklch(0.22 0.012 252 / 0.98);
+  --surface-toolbar: oklch(0.21 0.012 252 / 0.95);
+  --surface-panel: oklch(0.24 0.012 252 / 0.98);
+  --surface-panel-muted: oklch(0.27 0.012 252 / 0.95);
+}
+
+:root[data-theme='light'] {
   color-scheme: light;
   --background: oklch(0.982 0.003 248);
   --foreground: oklch(0.28 0.016 255);
@@ -22,7 +53,6 @@
   --border: oklch(0.9 0.008 247);
   --input: oklch(0.885 0.009 247);
   --ring: oklch(0.63 0.1 246 / 0.28);
-  --radius: 0.75rem;
   --surface-chrome: oklch(0.975 0.004 248 / 0.94);
   --surface-activity: oklch(0.968 0.006 248 / 0.96);
   --surface-sidebar: oklch(0.96 0.006 246 / 0.98);
@@ -57,7 +87,6 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 12px);
 }
 
 @layer base {
@@ -74,9 +103,9 @@
   body {
     @apply bg-background font-sans text-foreground antialiased;
     background-image:
-      linear-gradient(180deg, rgba(247, 249, 253, 0.96) 0%, rgba(242, 245, 249, 0.98) 100%),
-      radial-gradient(circle at top left, rgba(87, 115, 196, 0.08), transparent 26%),
-      radial-gradient(circle at 88% 12%, rgba(105, 141, 96, 0.08), transparent 18%);
+      radial-gradient(circle at top left, color-mix(in srgb, var(--primary) 18%, transparent) 0%, transparent 24%),
+      radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 16%, transparent) 0%, transparent 18%),
+      linear-gradient(180deg, color-mix(in srgb, var(--surface-chrome) 84%, transparent), color-mix(in srgb, var(--background) 96%, transparent));
     background-attachment: fixed;
   }
 
@@ -87,15 +116,23 @@
     font: inherit;
   }
 
+  textarea {
+    resize: vertical;
+  }
+
   ::selection {
-    background: color-mix(in srgb, var(--primary) 24%, transparent);
+    background: color-mix(in srgb, var(--primary) 28%, transparent);
     color: var(--foreground);
   }
 }
 
 @layer components {
   .editor-panel {
-    @apply rounded-xl border border-border bg-card shadow-[0_10px_30px_rgba(15,23,42,0.05)];
+    @apply rounded-xl border border-border bg-card shadow-[0_14px_38px_rgba(6,10,20,0.18)];
+  }
+
+  :root[data-theme='light'] .editor-panel {
+    box-shadow: 0 12px 36px rgba(15, 23, 42, 0.05);
   }
 
   .panel-muted {

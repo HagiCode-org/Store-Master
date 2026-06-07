@@ -55,10 +55,13 @@
     </div>
     <script>
       (() => {
-        const storageKey = 'storeMaster.language';
-        const storedLanguage = window.localStorage.getItem(storageKey);
+        const languageStorageKey = 'storeMaster.language';
+        const themeStorageKey = 'storeMaster.theme';
+        const storedLanguage = window.localStorage.getItem(languageStorageKey);
+        const storedTheme = window.localStorage.getItem(themeStorageKey);
         const browserLanguage = navigator.language || 'en-US';
         const language = /^zh/i.test(storedLanguage || browserLanguage) ? 'zh-CN' : 'en-US';
+        const theme = storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : 'dark';
         const copy = {
           'zh-CN': {
             title: 'Store Master',
@@ -74,6 +77,8 @@
         const localeCopy = copy[language];
 
         document.documentElement.lang = language;
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
         document.title = localeCopy.title;
         const loadingTitle = document.querySelector('.loading-title');
         const loadingSubtitle = document.querySelector('.loading-subtitle');
