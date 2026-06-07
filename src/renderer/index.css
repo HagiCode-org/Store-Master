@@ -2,33 +2,33 @@
 @import "tw-animate-css";
 
 :root {
-  color-scheme: dark;
-  --background: oklch(0.16 0.014 242);
-  --foreground: oklch(0.95 0.008 82);
-  --card: oklch(0.22 0.018 242 / 0.9);
-  --card-foreground: oklch(0.96 0.01 85);
-  --popover: oklch(0.2 0.018 242 / 0.96);
-  --popover-foreground: oklch(0.96 0.01 85);
-  --primary: oklch(0.74 0.132 71);
-  --primary-foreground: oklch(0.18 0.018 242);
-  --secondary: oklch(0.29 0.02 236 / 0.92);
-  --secondary-foreground: oklch(0.95 0.01 85);
-  --muted: oklch(0.26 0.015 239 / 0.9);
-  --muted-foreground: oklch(0.77 0.015 240);
-  --accent: oklch(0.31 0.028 214 / 0.9);
-  --accent-foreground: oklch(0.96 0.01 85);
-  --destructive: oklch(0.66 0.17 23);
-  --destructive-foreground: oklch(0.97 0.006 80);
-  --border: oklch(0.4 0.02 240 / 0.52);
-  --input: oklch(0.42 0.02 240 / 0.5);
-  --ring: oklch(0.72 0.1 71 / 0.54);
-  --radius: 0.875rem;
-  --surface-chrome: oklch(0.19 0.014 240 / 0.9);
-  --surface-activity: oklch(0.19 0.012 238 / 0.96);
-  --surface-sidebar: oklch(0.2 0.014 239 / 0.92);
-  --surface-toolbar: oklch(0.205 0.014 239 / 0.82);
-  --surface-panel: oklch(0.23 0.016 240 / 0.92);
-  --surface-panel-muted: oklch(0.25 0.014 239 / 0.86);
+  color-scheme: light;
+  --background: oklch(0.982 0.003 248);
+  --foreground: oklch(0.28 0.016 255);
+  --card: oklch(0.996 0.002 248 / 0.98);
+  --card-foreground: oklch(0.28 0.016 255);
+  --popover: oklch(0.998 0.002 248);
+  --popover-foreground: oklch(0.28 0.016 255);
+  --primary: oklch(0.56 0.108 248);
+  --primary-foreground: oklch(0.985 0.003 248);
+  --secondary: oklch(0.956 0.007 248);
+  --secondary-foreground: oklch(0.33 0.022 252);
+  --muted: oklch(0.966 0.005 248);
+  --muted-foreground: oklch(0.55 0.016 252);
+  --accent: oklch(0.938 0.012 238);
+  --accent-foreground: oklch(0.31 0.022 248);
+  --destructive: oklch(0.62 0.19 28);
+  --destructive-foreground: oklch(0.985 0.004 28);
+  --border: oklch(0.9 0.008 247);
+  --input: oklch(0.885 0.009 247);
+  --ring: oklch(0.63 0.1 246 / 0.28);
+  --radius: 0.75rem;
+  --surface-chrome: oklch(0.975 0.004 248 / 0.94);
+  --surface-activity: oklch(0.968 0.006 248 / 0.96);
+  --surface-sidebar: oklch(0.96 0.006 246 / 0.98);
+  --surface-toolbar: oklch(0.975 0.004 248 / 0.98);
+  --surface-panel: oklch(0.994 0.002 248 / 0.98);
+  --surface-panel-muted: oklch(0.97 0.006 246 / 0.96);
 }
 
 @theme inline {
@@ -74,13 +74,9 @@
   body {
     @apply bg-background font-sans text-foreground antialiased;
     background-image:
-      linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-      radial-gradient(circle at top left, rgba(226, 181, 90, 0.16), transparent 24%),
-      radial-gradient(circle at 84% 8%, rgba(89, 128, 188, 0.16), transparent 18%),
-      linear-gradient(180deg, rgba(8, 12, 18, 1) 0%, rgba(10, 14, 21, 1) 48%, rgba(13, 18, 27, 1) 100%);
-    background-size: 32px 32px, 32px 32px, auto, auto, auto;
-    background-position: 0 0, 0 0, center, center, center;
+      linear-gradient(180deg, rgba(247, 249, 253, 0.96) 0%, rgba(242, 245, 249, 0.98) 100%),
+      radial-gradient(circle at top left, rgba(87, 115, 196, 0.08), transparent 26%),
+      radial-gradient(circle at 88% 12%, rgba(105, 141, 96, 0.08), transparent 18%);
     background-attachment: fixed;
   }
 
@@ -92,28 +88,26 @@
   }
 
   ::selection {
-    background: color-mix(in srgb, var(--primary) 34%, transparent);
+    background: color-mix(in srgb, var(--primary) 24%, transparent);
     color: var(--foreground);
   }
 }
 
 @layer components {
   .editor-panel {
-    @apply rounded-2xl border border-border/70 bg-card/90 shadow-[0_18px_48px_rgba(0,0,0,0.16)];
+    @apply rounded-xl border border-border bg-card shadow-[0_10px_30px_rgba(15,23,42,0.05)];
   }
 
   .panel-muted {
     background: var(--surface-panel-muted);
-    @apply rounded-xl border border-border/70;
+    @apply rounded-lg border border-border;
   }
 
   .list-row {
-    background: color-mix(in srgb, var(--surface-panel-muted) 78%, transparent);
-    @apply rounded-xl border border-border/70;
+    @apply rounded-lg border border-border bg-background;
   }
 
   .status-chip {
-    background: color-mix(in srgb, var(--primary) 14%, transparent);
-    @apply inline-flex items-center rounded-lg border border-primary/20 px-2.5 py-1 font-mono text-[11px] text-primary;
+    @apply inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium;
   }
 }
