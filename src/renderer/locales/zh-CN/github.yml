@@ -1,0 +1,467 @@
+repos:
+  heroBadge: GitHub 工作区
+  heroTitle: 在一个桌面工作区里切换多个 GitHub 身份，并浏览所有关联仓库。
+  heroDescription: 通过浏览器完成授权，令牌始终停留在主进程内，个人仓库和组织仓库都可以在同一工作区内切换查看。
+  sectionDescription: 管理 GitHub 账号、授权新身份，并按归属方浏览仓库列表。
+  toolbarHint: 在一个本地桌面壳里完成身份切换、仓库盘点和工作流入口跳转，需要查看细节时可直接进入对应的 GitHub Actions 页面。
+  addAccount: 添加账号
+  refreshRepos: 刷新仓库
+  actionsReady: Actions 入口已就绪
+  actionsScanning: 正在扫描工作流
+  actionsUnavailable: 工作流扫描不可用
+  actionsSynced: 工作流状态已同步
+  actionsHintTitle: Actions 侧栏
+  actionsHint: Hagihub 现在会为当前加载的仓库扫描最新一次工作流运行，并把最近的运行记录固定展示在右侧检查栏中。
+  actionsHintLoading: Hagihub 仍在扫描仓库工作流，GitHub 返回结果后会在这里显示最近运行记录。
+  actionsHintPartial: 有 {{count}} 个仓库的工作流数据未能成功加载。
+  loadingAccounts: 正在加载 GitHub 账号
+  loadAccountsFailedTitle: 无法恢复 GitHub 账号数据。
+  retry: 重试
+  accountCount: '{{count}} 个账号'
+  orgCount: '{{count}} 个组织'
+  repoCount: '{{count}} 个仓库'
+  runningCount: '{{count}} 个运行中'
+  failedCount: '{{count}} 个失败'
+  passedCount: '{{count}} 个通过'
+  recentRunsTitle: 最近运行
+  recentRunsEmpty: 当前加载的仓库没有返回工作流运行记录。
+  noRunsCount: '{{count}} 个仓库无运行'
+reposAccountEntry:
+  selectAccount: 选择一个账号以浏览仓库。
+emptyState:
+  title: 还没有 GitHub 账号
+  description: 添加一个 GitHub 账号后，就可以在 Hagihub 里查看个人仓库和组织仓库。
+  secondary: 授权通过浏览器中的 GitHub Device Flow 完成，同时支持多个 GitHub 账号并存。
+  tipTitle: 开始查看工作流之前
+  tip1: 先添加具备仓库权限范围的 GitHub 账号。
+  tip2: 切换当前活跃身份，加载对应的仓库集合。
+  tip3: 使用每一行上的 Actions 按钮，直接在浏览器中打开工作流运行列表。
+  addFirst: 添加一个 GitHub 账号以开始浏览仓库。
+accountSelector:
+  eyebrow: 账号
+  title: 已连接身份
+  description: 切换当前活跃 GitHub 账号，或继续添加新的身份来查看另一组仓库。
+  active: 当前
+  connectedCount: 已连接 {{count}} 个
+  addedAt: 添加于 {{date}}
+  remove: 移除账号
+  removeConfirm: 确定要从当前设备移除 @{{login}} 吗？
+  encryptedStorage: 已加密存储
+  plaintextStorageShort: 明文退化存储
+  plaintextStorage: 当前设备缺少系统密钥环能力，令牌已退化为明文加密存储模式。
+accountManagement:
+  badge: 账号管理
+  title: 账号管理
+  description: 在这里统一管理所有已连接的 GitHub 账号、添加新身份并维护凭据。
+  migrationHint: 账号管理已迁移到一级导航入口，现在可以直接从侧边栏进入。
+  emptyTitle: 暂无账号
+  emptyDescription: 添加一个 GitHub 账号，即可开始浏览仓库和查看工作流。
+  hint: 账号管理负责身份与凭据维护，各功能在自身上下文中使用账号。
+deviceFlow:
+  title: 添加 GitHub 账号
+  description: 请在浏览器中完成 GitHub 授权。Hagihub 会在主进程中持续轮询，直到 GitHub 确认登录成功。
+  codeLabel: 一次性验证码
+  openBrowser: 在浏览器中打开 GitHub
+  browserHint: GitHub 会要求你输入左侧验证码，然后确认申请的权限范围。
+  requesting: 正在请求 GitHub 授权码
+  waiting: 正在等待浏览器授权
+  success: 授权完成
+  retry: 重新开始
+  cancel: 取消
+  close: 关闭
+  done: 完成
+  githubUser: GitHub 用户
+  securityHint: 令牌只会保存在本地，并且在拉取仓库数据时仅由 Electron 主进程使用。
+  steps:
+    open: 1. 打开 GitHub 授权页面。
+    enter: 2. 输入左侧显示的验证码。
+    finish: 3. 确认授权后，Hagihub 会自动完成登录。
+repoList:
+  eyebrow: 仓库
+  title: 仓库清单
+  description: Hagihub 先拉取组织列表，再按归属方把仓库统一分组展示。
+  actionsTitle: 工作流入口
+  actionsDescription: 在一个列表里查看仓库归属、活跃度和可见性，再直接跳到对应的 GitHub Actions 页面，无需离开桌面壳。
+  loading: 正在加载仓库
+  loadingHint: Hagihub 会等所有 GitHub 分页返回后再一次性渲染列表。
+  loadFailed: 仓库加载失败
+  retry: 重新加载
+  emptyTitle: 暂无仓库
+  emptyDescription: GitHub 返回了空仓库列表，请确认当前授权账号具备 `repo` 权限范围。
+  createAction: 创建仓库
+  dismissFeedback: 关闭提示
+  filteredEmptyTitle: 当前筛选条件下没有匹配的仓库
+  filteredEmptyDescription: 调整归属、可见性或搜索条件后，再查看仓库列表。
+  repoCountLabel: '{{count}} 个仓库'
+  personalRepos: 个人仓库
+  personalDescription: 当前活跃账号直接拥有，或未匹配到已加载组织的仓库。
+  organizationRepos: 当前组织名下的仓库分组。
+  actionsLoading: 正在扫描最近的 GitHub Actions 运行。
+  actionsLoaded: 已为 {{count}} 个仓库加载工作流状态。
+  actionsPartialFailure: 有 {{count}} 个仓库的工作流扫描失败。
+  searchPlaceholder: 搜索仓库名称或描述...
+  tableCaption: '{{owner}} 仓库列表，共 {{count}} 个。'
+  columns:
+    repository: 仓库
+    visibility: 可见性
+    actions: 操作
+  visibilityAll: 全部
+  visibilityPublic: 公开
+  visibilityPrivate: 私有
+  metrics:
+    repos: 仓库
+    organizations: 组织
+    running: 运行中
+    failed: 失败
+    passed: 通过
+    private: 私有
+    updated: 7 天内更新
+    updatedCount: '{{count}} 个仓库在 7 天内更新'
+createDialog:
+  title: 创建仓库
+  description: 无需离开 Hagihub，即可创建个人仓库或组织仓库。
+  close: 关闭对话框
+  selected: 已选择
+  ownerLabel: 归属
+  ownerPlaceholder: 选择归属方
+  ownerSearchPlaceholder: 搜索归属方...
+  ownerEmpty: 暂无可用归属方
+  nameLabel: 仓库名称
+  namePlaceholder: 输入仓库名称
+  descriptionLabel: 描述
+  descriptionPlaceholder: 可选的仓库描述
+  visibilityLabel: 可见性
+  visibilityPublic: 公开
+  visibilityPublicHint: 任何人都可以查看并克隆这个仓库。
+  visibilityPrivate: 私有
+  visibilityPrivateHint: 只有获准的协作者可以查看这个仓库。
+  initializationTitle: 初始化选项
+  initializationDescription: 选择是否由 GitHub 为这个仓库创建第一次提交。
+  initializeWithReadme: 添加 README
+  gitignoreLabel: .gitignore 模板
+  gitignorePlaceholder: 选择一个模板
+  gitignoreSearchPlaceholder: 搜索模板...
+  gitignoreEmpty: 没有匹配的模板
+  licenseLabel: 许可证
+  licensePlaceholder: 选择一个许可证
+  licenseSearchPlaceholder: 搜索许可证...
+  licenseEmpty: 没有匹配的许可证
+  cancel: 取消
+  create: 创建仓库
+  creating: 创建中
+  successTitle: 仓库已创建
+  successMessage: '{{repo}} 已出现在仓库列表中。'
+  refreshFailed: 仓库已经创建成功，但 Hagihub 暂时无法自动刷新列表。请使用“刷新仓库”重新加载。
+  specialRepos:
+    title: 特殊仓库类型
+    description: 选择常见的 GitHub 特殊仓库模式后，名称会自动填写；依赖归属方的模式会在归属变化时自动更新。
+    clearSelection: 清除选择
+    github:
+      label: .github
+      description: 用于 Issue 模板、工作流和社区规范的 GitHub 配置仓库。
+    githubPages:
+      label: .github.io
+      description: 当前归属方的 GitHub Pages 站点仓库。
+      tooltip: 这个模式会按当前归属方解析为 {{owner}}.github.io。
+    username:
+      label: '{{owner}}'
+      description: 与你的 GitHub 用户名同名的个人资料仓库。
+      tooltip: 仅在当前归属方是个人账号时可用。
+    errors:
+      duplicate: 当前归属方下已经存在名为“{{name}}”的仓库。
+      duplicateAction: 你可以查看现有仓库、修改名称，或继续提交并让 GitHub 最终裁决。
+      viewExisting: 查看现有仓库
+      closeWarning: 关闭
+      createAnyway: 仍然创建
+  ownerTypes:
+    personal: 个人账号
+    organization: 组织
+  errors:
+    nameRequired: 仓库名称不能为空。
+    validation: GitHub 拒绝了当前仓库设置，请检查名称和初始化选项后重试。
+    permissionDenied: GitHub 拒绝了为当前归属方创建仓库的权限请求。
+    rateLimited: GitHub 触发了速率限制，请稍后再试。
+    network: Hagihub 当前无法连接到 GitHub，请检查网络后重试。
+    unauthorized: GitHub 授权已经失效，请重新连接当前账号后再试。
+    unknown: GitHub 暂时无法创建这个仓库，请稍后重试。
+repoCard:
+  private: 私有
+  public: 公开
+  fork: Fork
+  owner: 归属
+  updated: 更新
+  actions: 工作流
+  lastRun: 最近运行
+  actionsScanning: 正在扫描工作流状态
+  actionsUnavailable: 无法获取工作流状态
+  noRuns: 暂无工作流运行
+  triggeredBy: '事件：{{event}}'
+  openLatestRun: 最近运行
+  openRepo: 仓库
+  openActions: Actions
+  noDescription: 暂无仓库描述。
+  updatedAt: 更新于 {{date}}
+  state:
+    loading: 扫描中
+    running: 运行中
+    passed: 已通过
+    failed: 失败
+    empty: 无运行
+    error: 异常
+  info:
+    title: 仓库信息
+    url: URL
+    description: 描述
+    descriptionPlaceholder: 暂无描述
+    homepage: 主页
+    homepagePlaceholder: 未设置主页
+    topics: 话题标签
+    topicsPlaceholder: 用逗号分隔添加话题
+    noTopics: 暂无话题
+    visibility: 可见性
+    defaultBranch: 默认分支
+    language: 语言
+    license: 许可证
+    stars: 星标
+    forks: 复刻
+    openIssues: 待处理 Issue
+    watchers: 关注者
+    createdAt: 创建时间
+    updatedAt: 更新时间
+    pushedAt: 最近推送
+    edit: 编辑信息
+    save: 保存
+    cancel: 取消
+    saving: 保存中
+    saveSuccess: 更改已保存
+    saveFailed: 保存失败
+  tabs:
+    description: 在 Hagihub 里查看仓库元数据、README 内容和许可证文本，无需切回 GitHub 网页。
+    info: 仓库信息
+    readme: README
+    license: LICENSE
+  commitDialog:
+    title: 保存 {{filename}}
+    description: 选择直接把这次改动写入默认分支，或先创建分支并发起拉取请求。
+    close: 关闭
+    selected: 已选择
+    directTitle: 直接提交到 {{branch}}
+    directDescription: 立即将这次选中的改动写入仓库默认分支。
+    prTitle: 创建拉取请求
+    prDescription: 从 {{branch}} 创建新分支，在新分支上提交这次改动，然后自动发起拉取请求。
+    branchLabel: 拉取请求分支名
+    branchPlaceholder: 输入分支名
+    branchHint: Hagihub 会先生成一个建议分支名，你也可以在创建前自行修改。
+    cancel: 取消
+    submitting: 保存中
+    confirmDirect: 提交到分支
+    confirmPr: 创建拉取请求
+  readme:
+    description: 以多语言工作区的方式管理仓库 README 集合。
+    workspaceLabel: README 工作区
+    workspaceDescription: 在一个界面里编辑、复制并提交受管的 README 语言版本。
+    loading: 正在加载 README 工作区
+    loadFailed: 加载 README 工作区失败。
+    languagesTitle: 语言版本
+    languagesDescription: 在受管的 README 版本之间切换，并保持语言导航链接同步。
+    variantDescription: '{{locale}} 对应的 README 语言版本。'
+    editorTitle: 编辑区
+    editorStats: '{{count}} 个字符'
+    editorPlaceholder: 在这里编写当前 README 版本的内容。
+    previewTitle: 预览区
+    previewEmpty: 这里会随着编辑实时显示 Markdown 预览。
+    emptyTitle: 这个 README 版本还没有内容
+    emptyDescription: 可以从空白草稿开始，也可以先从其他 README 版本复制内容。
+    edit: 编辑 README
+    create: 创建 README
+    editWorkspace: 编辑 README 工作区
+    save: 保存 README
+    saveAll: 保存全部 README 改动
+    cancel: 取消
+    saveSuccess: README.md 已保存。
+    saveFailed: 保存 README.md 失败。
+    prSuccess: 已为 README.md 创建拉取请求 #{{number}}。
+    conflict: README.md 已被其他人修改，请刷新后再试。
+    saveSuccessSummary: 已保存 {{count}} 个 README 版本。
+    prSuccessSummary: '已为 {{count}} 个 README 版本创建拉取请求 #{{number}}。'
+    conflictFile: '{{filename}} 已被其他人修改，请刷新后重试。'
+    saveFailedFile: '保存 {{filename}} 失败：{{error}}'
+    partialSaveHint: 工作流停止前已有 {{count}} 个 README 版本写入成功。
+    batchScope: 将会把 {{count}} 个已修改的 README 版本一起提交。
+    addLanguageTitle: 添加语言
+    addLanguagePlaceholder: 选择一个语言版本
+    addLanguageSearchPlaceholder: 搜索语言版本...
+    addLanguageEmpty: 没有更多可添加的语言版本。
+    copyFromTitle: 从其他版本复制
+    copyFromPlaceholder: 选择一个源 README
+    copyFromSearchPlaceholder: 搜索 README 版本...
+    copyFromEmpty: 没有其他 README 版本可供复制。
+    copiedFrom: 已从 {{filename}} 复制内容。
+    saved: 已存在于仓库
+    draftOnly: 仅草稿
+    unsaved: 未保存
+    roles:
+      primary: 主 README
+      canonical-en: 英文基准
+      localized: 本地化版本
+  license:
+    description: 查看、起草或替换仓库的 LICENSE 文件。
+    loading: 正在加载 LICENSE
+    loadFailed: 加载 LICENSE 失败。
+    editorPlaceholder: 在这里粘贴或编辑许可证文本。
+    emptyTitle: 还没有 LICENSE 文件
+    emptyDescription: 可以先选择一个常见许可证模板，或从空白内容开始。
+    presetTitle: 许可证模板
+    presetDescription: 先载入常见开源许可证模板，再决定是新建许可证还是覆盖当前许可证内容。
+    presetPlaceholder: 选择许可证模板
+    presetSearchPlaceholder: 搜索许可证模板...
+    presetEmpty: 没有匹配的许可证模板。
+    edit: 编辑 LICENSE
+    create: 创建 LICENSE
+    save: 保存 LICENSE
+    cancel: 取消
+    saveSuccess: LICENSE 已保存。
+    saveFailed: 保存 LICENSE 失败。
+    prSuccess: 已为 LICENSE 创建拉取请求 #{{number}}。
+    conflict: LICENSE 已被其他人修改，请刷新后再试。
+    presets:
+      mit: MIT 许可证
+      "apache-2.0": Apache 2.0 许可证
+      "gpl-3.0": GNU GPL v3.0
+      "lgpl-3.0": GNU LGPL v3.0
+      "bsd-2-clause": BSD 2 条款许可证
+      "bsd-3-clause": BSD 3 条款许可证
+      "mpl-2.0": Mozilla Public License 2.0
+      "agpl-3.0": GNU AGPL v3.0
+errors:
+  loadAccountsFailed: 加载 GitHub 账号失败。
+  startDeviceFlowFailed: 启动 GitHub Device Flow 失败。
+  cancelDeviceFlowFailed: 取消 GitHub Device Flow 失败。
+  removeAccountFailed: 移除 GitHub 账号失败。
+  switchAccountFailed: 切换活跃 GitHub 账号失败。
+  fetchReposFailed: 加载 GitHub 仓库失败。
+  deviceFlowFailed: GitHub 授权失败。
+  storageReset: 本地 GitHub 账号存储文件已损坏，应用已自动重置并备份原文件。
+  openBrowserFailed: Hagihub 无法打开 GitHub 授权页面。
+  openPullRequestFailed: Hagihub 无法在浏览器中打开对应的拉取请求。
+  orgsPartialFailed: 组织列表加载失败，但个人仓库仍然可用。
+  fetchActionsFailed: 加载 GitHub Actions 工作流数据失败。
+  loadManagedActionsFailed: 恢复已托管工作流失败。
+  loadRepoWorkflowsFailed: 加载所选仓库的工作流失败。
+  loadRepoWorkflowsTimedOut: 加载所选仓库的工作流超时。
+  searchWorkflowsFailed: 搜索 GitHub 工作流失败。
+  saveManagedActionsFailed: 更新托管工作流列表失败。
+  refreshManagedActionsFailed: 刷新托管工作流状态失败。
+  dispatchWorkflowFailed: 触发工作流失败。
+actionManagement:
+  badge: 工作流工作区
+  title: Action 管理
+  description: 页面只保留托管工作流看板，需要批量配置时再打开“配置工作流”完成仓库加载与选择调整。
+  refresh: 刷新托管工作流
+  retry: 重试
+  loading: 正在恢复托管工作流
+  loadFailedTitle: 无法恢复托管工作流。
+  addAccount: 添加账号
+  openAccounts: 打开账号管理
+  noAccountBadge: 需要账号
+  noAccountTitle: 先连接 GitHub 账号，再开始管理工作流。
+  noAccountDescription: Action 管理依赖当前活跃账号来恢复已托管工作流、批量加载仓库工作流并发起手动运行。
+  managedCount: 已托管 {{count}} 个
+  failedRefreshCount: 有 {{count}} 个工作流需要关注
+  transfer:
+    title: 配置工作流
+    description: 先选仓库，再在双栏之间移动工作流，最后确认并保存新的托管集合。
+    configure: 配置工作流
+    personalOwner: 个人仓库
+    phaseRepos: ① 选择仓库
+    phaseTransfer: ② 转移选择
+    phaseConfirm: ③ 确认保存
+    repoSelectionHint: 先选择归属方，再从当前归属方的仓库列表里勾选一个或多个仓库。
+    ownerLabel: 仓库归属
+    ownerOptionLabel: '{{label}}（{{count}} 个仓库）'
+    ownerSelectionHint: 这里一次只展示当前归属方的仓库，便于在大量仓库中筛选和选择。
+    reposSelected: 已选择 {{count}} 个仓库
+    ownerSelectionSummary: 已选 {{selected}} / {{total}}
+    ownerRepoCount: 当前归属方共有 {{count}} 个仓库
+    selectAll: 全选
+    deselectAll: 取消全选
+    loadingRepos: 正在加载仓库列表
+    noReposAvailable: 当前活跃账号还没有可用仓库。
+    cancel: 取消
+    back: 返回
+    loadWorkflows: 加载工作流
+    save: 保存
+    saving: 保存中
+    loadingProgress: 正在加载第 {{current}} / {{total}} 个仓库...
+    loadErrorsTitle: 部分仓库加载失败
+    available: '可选项（{{count}}）'
+    availableHint: 双击条目，或使用中间箭头把工作流加入右侧。
+    selected: '已选择（{{count}}）'
+    selectedHint: 保存后，右侧列表会成为新的托管工作流集合。
+    repoSearchPlaceholder: 按仓库名、归属或描述搜索...
+    noRepoSearchResults: 当前筛选条件下没有匹配的仓库。
+    searchPlaceholder: 按工作流名称、路径或仓库名搜索...
+    emptyAvailable: 所有工作流都已经加入右侧。
+    emptySelected: 还没有选择任何工作流。
+    noSearchResults: 当前筛选条件下没有匹配的工作流。
+    moveSelectedToChosen: 将选中的工作流移入已选择列表
+    moveAllToChosen: 将当前可见工作流全部移入已选择列表
+    moveSelectedBack: 将选中的工作流移出已选择列表
+    moveAllBack: 将全部工作流移出已选择列表
+    confirmDescription: 请确认下面这 {{count}} 个工作流，保存后会直接替换当前托管集合。
+  table:
+    status: 状态
+    workflow: 工作流
+    path: 路径
+    latestRun: 最近运行
+    updated: 更新时间
+    actions: 操作
+  managed:
+    badge: 托管工作流
+    title: 固定工作流看板
+    description: 每次进入页面都会自动刷新已固定工作流，因此无需打开 GitHub 也能先看到最新状态。
+    refreshing: 正在刷新工作流状态
+    emptyTitle: 还没有固定工作流
+    emptyDescription: 打开“配置工作流”，加载仓库并保存第一批托管工作流。
+  actionMonitoring:
+    notification:
+      completed: 运行完成
+    state:
+      success: 成功
+      failure: 失败
+    toggle:
+      start: 开始监控
+      stop: 停止监控
+    monitoredCount: 已监控 {{count}} 个
+  state:
+    success: 成功
+    failure: 失败
+    inProgress: 运行中
+    waiting: 等待中
+    unavailable: 不可用
+    error: 异常
+  card:
+    dispatchReady: 已启用手动运行
+    dispatchUnavailable: 不支持手动运行
+    latestRun: 最近运行
+    latestRunMeta: '事件：{{event}} · 分支：{{branch}}'
+    unknownBranch: 未知分支
+    noRun: GitHub 还没有为这个工作流返回最近一次运行记录。
+    updated: 刷新时间
+    defaultBranch: '默认分支：{{branch}}'
+    runWorkflow: 运行工作流
+    openGithub: 在 GitHub 中打开
+    remove: 移除
+  dispatch:
+    title: 运行工作流
+    close: 关闭对话框
+    repository: 仓库
+    targetRef: 目标 ref
+    defaultRefFallback: 使用 GitHub 默认分支
+    noInputs: 这个工作流没有声明手动触发输入项。Hagihub 会直接针对默认分支提交 dispatch 请求。
+    selectPlaceholder: 选择一个值
+    valuePlaceholder: 输入一个值
+    required: 必填
+    cancel: 取消
+    submit: 触发工作流
+    submitting: 正在触发

@@ -1,0 +1,12 @@
+node_modules
+dist
+out
+pkg
+.cache
+.cache/msix-assets
+.env
+.DS_Store
+*.log
+.vscode
+.idea
+src/renderer/locales/generated-locales/

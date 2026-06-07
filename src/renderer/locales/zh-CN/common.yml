@@ -1,0 +1,147 @@
+app:
+  name: Hagihub
+language:
+  label: 语言
+navigation:
+  sections:
+    overview:
+      label: 概览
+      description: 基础设施与运行状态
+    repos:
+      label: 仓库
+      description: 浏览和管理 GitHub 仓库
+    actions:
+      label: Action 管理
+      description: 搜索、固定、刷新并手动运行 GitHub 工作流
+    accounts:
+      label: 账号
+      description: 账号管理与凭据维护
+    settings:
+      label: 设置
+      description: 桌面端配置与调试入口
+shell:
+  foundationBadge: Hagihub 基础层
+  title: HagiCode Hub
+  description: 面向后续 Hagihub 开发的桌面端基础壳，已经接入 UI 基础组件、状态管理和 Electron 数据桥接。
+  chromeBadge: 本地桌面壳
+  navigationLabel: 工作区
+  expandSidebar: 展开侧边栏
+  collapseSidebar: 收起侧边栏
+  navigationDescription: 在仓库、工作流、账号和设置之间切换。
+  activeSectionLabel: 当前通道
+  runtimeSnapshot: 运行时快照
+  loading: 加载中
+  loadingRuntime: 正在加载运行时
+  runtimeUnavailable: 运行时不可用
+  runtimeConnected: 运行时已连接
+  prepareTitle: 为 Hagihub 准备好后续开发所需的前端基础层。
+  prepareDescription: 现在的 renderer 已经不是单一展示页，而是具备可复用 UI、集中式状态管理、统一主题 token 和 Electron 数据接入能力的应用壳。
+  openRepository: 打开仓库
+  refreshRuntime: 刷新运行信息
+  rendererStackLabel: 渲染层栈
+  rendererStackValue: React 19 + Redux Toolkit + shadcn
+  rendererStackDescription: 当前最核心的状态、组件和构建基线都已经接入，后续可以直接开始切业务模块。
+  appModeLabel: 应用模式
+  appModePackaged: 已打包构建
+  appModeDevelopment: 开发壳
+  electronLabel: Electron
+  environmentSnapshotTitle: 环境快照
+  environmentSnapshotDescription: 通过 preload API 注入，并由 Redux 统一管理。
+  suggestedNextSteps: 建议的下一步
+  foundationModulesLabel: 基础模块
+  info:
+    channel: 通道
+    platform: 平台
+    version: 版本
+    app: 应用
+    chrome: Chrome
+    node: Node
+  buildChannel:
+    development: 开发环境
+    production: 生产环境
+  foundationModules:
+    - 带严格 TypeScript 配置的 React 19 renderer 入口
+    - 包含 typed hooks 和 preload 异步桥接状态的 Redux Toolkit store
+    - 兼容 shadcn 的组件目录与 Tailwind 基础层
+    - 支持 @/ 导入别名的 renderer 模块组织方式
+  roadmap:
+    overview:
+      - title: 基础层已就绪
+        detail: 依赖、目录和状态管理已经从单页演示升级为可扩展应用壳。
+      - title: Electron 桥接已接通
+        detail: 主进程提供的 appInfo 已通过 Redux thunk 统一接管。
+      - title: UI 系统已可扩展
+        detail: 后续新增页面时可以直接基于 shadcn 风格组件和共享设计 token 扩展。
+    repos:
+      - title: Hub 面板
+        detail: 实例列表、资源监控、任务面板和消息中心可以继续在这里落位。
+      - title: 功能模块拆分
+        detail: 下一步建议新增 features 目录，按领域拆分 slice、组件和 IPC 契约。
+      - title: 导航能力可继续扩展
+        detail: 当前 section 状态已经为多页签或路由接入留出了空间。
+    actions:
+      - title: 托管工作流看板
+        detail: 常用发布和维护工作流可以固定在这里，保持一键可达。
+      - title: Dispatch 安全边界
+        detail: 手动触发和输入校验都应继续留在主进程边界内，并给出明确错误反馈。
+      - title: 后续扩展空间
+        detail: 这个工作区后续可以自然扩展到 runner、日志和队列检查，而不需要重做导航。
+    settings:
+      - title: 环境控制项
+        detail: 后续可以在这里接入日志级别、更新通道、实验开关和诊断面板。
+      - title: 状态持久化
+        detail: 如果需要本地配置持久化，可以继续接到 middleware 或 preload IPC 层。
+      - title: 设计系统继续扩展
+        detail: 未来的表单、对话框和表格建议继续沿用当前 shadcn 组件目录。
+  nextSteps:
+    - 后续在 src/renderer/features 下按业务域拆分组件、slice 和 IPC actions。
+    - 需要更多 shadcn 组件时，继续基于 components.json 扩展。
+    - 当页面增长到多个视图时，再从当前 section 状态切换到 React Router。
+  statusBar:
+    section: 区域
+    account: 账号
+    repos: 仓库
+    orgs: 组织
+    runtime: 运行时
+    ready: 已就绪
+    none: 无
+settingsPage:
+  badge: 设置工作区
+  title: 设置
+  description: 现在一级设置入口会直接渲染真实设置页，不再回退到旧的应用壳占位内容。通知诊断先在这里落地。
+  workspaceTitle: 工作区说明
+  workspaceDescription: 这里已经切成桌面端配置与诊断的正式入口。
+  workspaceHint1: 可以直接用通知卡片验证主进程桥接、桌面通知权限，以及点击通知后窗口聚焦是否正常。
+  workspaceHint2: 后续新增更多设置分区时，也可以继续落在这里，不必再走旧的占位页。
+  notification:
+    badge: 通知中心
+    title: 通知设置
+    description: 在这里验证原生桌面通知链路，并确认 Hagihub 通过 Electron 发出的当前预览负载。
+    testSectionTitle: 发送测试通知
+    testSectionDescription: 立即触发一条原生桌面通知，并在点击通知时保持 Hagihub 回到设置页。
+    testButton: 发送测试通知
+    sending: 发送中...
+    testSuccess: 测试通知已发送
+    testSuccessDescription: 如果当前桌面环境允许通知，你应该已经能看到系统原生通知横幅。
+    testError: 测试通知发送失败
+    testErrorDescription: '通知请求失败：{{error}}'
+    sendFailedFallback: 通知请求失败。
+    eventShown: 最近一次显示通知
+    eventShownValue: '已收到显示事件：{{id}}'
+    eventClicked: 最近一次点击通知
+    eventClickedValue: '已收到点击事件：{{id}}'
+    eventPending: 还没有记录到通知事件。
+    previewTitle: 通知预览负载
+    previewDescription: 下面这些字段就是当前页面点击“发送测试通知”时实际发往 Electron 的内容。
+    preview:
+      title: Hagihub 通知测试
+      body: 桌面通知链路已经接通。点击这条通知后，Hagihub 会保持在设置分区。
+    values:
+      focusWindow: focus-window -> settings
+    fields:
+      title: 标题
+      body: 正文
+      level: 级别
+      clickAction: 点击动作
+      duration: 持续时间
+      silent: 静默
