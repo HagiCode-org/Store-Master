@@ -48,12 +48,14 @@ function syncManagedActionsForActiveAccount(dispatch: AppDispatch, state: RootSt
 }
 
 function syncSectionData(dispatch: AppDispatch, state: RootState): void {
-  if (state.navigation.activeSection === 'repos') {
+  const activeSection = state.navigation.activeSection as string;
+
+  if (activeSection === 'repos') {
     syncReposForActiveAccount(dispatch, state);
     return;
   }
 
-  if (state.navigation.activeSection === 'actions') {
+  if (activeSection === 'actions') {
     syncReposForActiveAccount(dispatch, state);
     syncManagedActionsForActiveAccount(dispatch, state);
   }

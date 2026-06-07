@@ -1,6 +1,6 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
-export type NavigationSection = 'overview' | 'repos' | 'actions' | 'accounts' | 'settings';
+export type NavigationSection = 'products' | 'product-profile' | 'settings';
 
 interface NavigationState {
   activeSection: NavigationSection;
@@ -8,7 +8,7 @@ interface NavigationState {
 }
 
 const initialState: NavigationState = {
-  activeSection: 'overview',
+  activeSection: 'products',
   sidebarCollapsed: false,
 };
 

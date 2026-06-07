@@ -8,12 +8,16 @@ import actionManagementReducer from './slices/actionManagementSlice';
 import githubAccountsReducer from './slices/githubAccountsSlice';
 import githubActionsReducer from './slices/githubActionsSlice';
 import githubReposReducer from './slices/githubReposSlice';
+import productManagementReducer from './slices/productManagementSlice';
 import repoWorkspacesReducer from './slices/repoWorkspaceSlice';
+import themeReducer from './slices/themeSlice';
 
-export const store = configureStore({
+export const createAppStore = () => configureStore({
   reducer: {
     hub: hubReducer,
     navigation: navigationReducer,
+    theme: themeReducer,
+    productManagement: productManagementReducer,
     actionManagement: actionManagementReducer,
     githubAccounts: githubAccountsReducer,
     githubActions: githubActionsReducer,
@@ -23,6 +27,8 @@ export const store = configureStore({
   middleware: (getDefaultMiddleware) => getDefaultMiddleware().prepend(listenerMiddleware.middleware),
   devTools: import.meta.env.DEV,
 });
+
+export const store = createAppStore();
 
 registerStoreListeners();
 
