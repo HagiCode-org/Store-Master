@@ -40,7 +40,7 @@ npm run dev
 ```
 
 This will start:
-- Renderer development server on `http://127.0.0.1:36599`
+- Renderer development server on `http://127.0.0.1:38659`
 - TypeScript compiler in watch mode
 - Preload script compiler in watch mode
 - Electron app

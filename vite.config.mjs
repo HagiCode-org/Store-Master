@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DEV_RENDERER_PORT = 38659;
 
 export default {
   plugins: [
@@ -26,7 +27,7 @@ export default {
     },
   },
   server: {
-    port: 36599,
+    port: DEV_RENDERER_PORT,
     host: '127.0.0.1',
   },
 };

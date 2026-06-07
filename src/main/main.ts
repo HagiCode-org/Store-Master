@@ -5,7 +5,7 @@ import type { AppInfo, ExternalOpenResult, PlatformId } from '../shared/api.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEV_RENDERER_HOST = '127.0.0.1';
-const DEV_RENDERER_PORT = 36599;
+const DEV_RENDERER_PORT = 38659;
 const DEV_RENDERER_URL = `http://${DEV_RENDERER_HOST}:${DEV_RENDERER_PORT}`;
 
 let mainWindow: BrowserWindow | null = null;

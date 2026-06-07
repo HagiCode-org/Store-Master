@@ -10,6 +10,9 @@ export default defineConfig({
     },
     outDir: 'dist/preload',
     emptyOutDir: true,
+    rollupOptions: {
+      external: ['electron'],
+    },
   },
   resolve: {
     alias: {
