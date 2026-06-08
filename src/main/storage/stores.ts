@@ -5,10 +5,12 @@ import type {
   MsStoreDataImportResult,
 } from '../../shared/ms-store-data.js';
 import {
-  createEmptyMsStoreDataDataset,
   createMsStoreDataImportResult,
+  createEmptyMsStoreDataDataset,
+  getMsStoreDataExportError,
   isMsStoreDataDataset,
   normalizeMsStoreDataDataset,
+  serializeMsStoreDataDatasetToCsv,
 } from '../../shared/ms-store-data.js';
 import {
   isProductRecord,
@@ -57,7 +59,7 @@ function createMsStoreDataDefinition(productStorageId: string): StoreDefinition<
   return {
     key: `ms-store-data:${productStorageId}`,
     fileName: resolveProductScopedFileName(productStorageId, 'ms-store-data.json'),
-    version: 1,
+    version: 2,
     defaultData: createEmptyMsStoreDataDataset(productStorageId),
     validate: (data): data is MsStoreDataDataset => {
       return isMsStoreDataDataset(data) && data.productStorageId === productStorageId;
@@ -122,16 +124,16 @@ export async function writeProductMsStoreData(productStorageId: string, dataset:
 export async function importProductMsStoreDataFromFile(productStorageId: string, filePath: string): Promise<MsStoreDataImportResult> {
   try {
     const raw = await fs.readFile(filePath, 'utf8');
-    const parsed = JSON.parse(raw) as unknown;
-    return createMsStoreDataImportResult(parsed, productStorageId, filePath);
+    const currentDataset = await readProductMsStoreData(productStorageId);
+    return createMsStoreDataImportResult(raw, productStorageId, currentDataset, filePath);
   } catch {
     return {
       success: false,
       filePath,
       errors: [{
-        field: 'dataset',
+        field: 'csv',
         index: null,
-        messageKey: 'validation.msStore.importInvalidJson',
+        messageKey: 'validation.msStore.importInvalidCsv',
       }],
     };
   }
@@ -144,15 +146,29 @@ export async function exportProductMsStoreDataToFile(filePath: string, dataset: 
     return {
       success: false,
       entryCount: dataset.entries.length,
-      error: 'Invalid MS Store dataset.',
+      error: 'validation.msStore.exportInvalidWorkspace',
     };
   }
 
-  await writeAtomically(filePath, `${JSON.stringify({
-    productStorageId: normalizedDataset.productStorageId,
-    exportedAt: new Date().toISOString(),
-    entries: normalizedDataset.entries,
-  }, null, 2)}\n`);
+  const exportError = getMsStoreDataExportError(normalizedDataset);
+  if (exportError) {
+    return {
+      success: false,
+      entryCount: normalizedDataset.entries.length,
+      error: exportError,
+    };
+  }
+
+  const csvDocument = serializeMsStoreDataDatasetToCsv(normalizedDataset);
+  if (!csvDocument) {
+    return {
+      success: false,
+      entryCount: normalizedDataset.entries.length,
+      error: 'validation.msStore.exportInvalidWorkspace',
+    };
+  }
+
+  await writeAtomically(filePath, csvDocument);
 
   return {
     success: true,

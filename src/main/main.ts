@@ -171,10 +171,10 @@ ipcMain.handle('store-master:import-ms-store-data', async (_event, productStorag
   const window = BrowserWindow.getFocusedWindow() ?? mainWindow;
   const selection = window ? await dialog.showOpenDialog(window, {
     properties: ['openFile'],
-    filters: [{ name: 'JSON', extensions: ['json'] }],
+    filters: [{ name: 'CSV', extensions: ['csv'] }],
   }) : await dialog.showOpenDialog({
     properties: ['openFile'],
-    filters: [{ name: 'JSON', extensions: ['json'] }],
+    filters: [{ name: 'CSV', extensions: ['csv'] }],
   });
 
   const filePath = selection.filePaths[0];
@@ -191,11 +191,11 @@ ipcMain.handle('store-master:import-ms-store-data', async (_event, productStorag
 ipcMain.handle('store-master:export-ms-store-data', async (_event, productStorageId: string, dataset: MsStoreDataDataset): Promise<MsStoreDataExportResult> => {
   const window = BrowserWindow.getFocusedWindow() ?? mainWindow;
   const selection = window ? await dialog.showSaveDialog(window, {
-    filters: [{ name: 'JSON', extensions: ['json'] }],
-    defaultPath: `${productStorageId}-ms-store-data.json`,
+    filters: [{ name: 'CSV', extensions: ['csv'] }],
+    defaultPath: 'win_store.csv',
   }) : await dialog.showSaveDialog({
-    filters: [{ name: 'JSON', extensions: ['json'] }],
-    defaultPath: `${productStorageId}-ms-store-data.json`,
+    filters: [{ name: 'CSV', extensions: ['csv'] }],
+    defaultPath: 'win_store.csv',
   });
 
   if (selection.canceled || !selection.filePath) {
