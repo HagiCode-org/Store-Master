@@ -259,6 +259,14 @@ const msStoreDataSlice = createSlice({
       state.draft = createDraftForProduct(state.activeProductStorageId);
       state.fieldErrors = {};
     },
+    replaceMsStoreDraft(state, action: PayloadAction<MsStoreDataDraft>) {
+      state.draft = {
+        ...action.payload,
+        fieldValues: { ...action.payload.fieldValues },
+      };
+      state.fieldErrors = {};
+      clearStatuses(state);
+    },
     updateMsStoreDraftField(
       state,
       action: PayloadAction<{ field: keyof Pick<MsStoreDataDraft, 'locale' | 'market' | 'storeId' | 'title' | 'subtitle' | 'shortDescription' | 'description' | 'keywordsText'>; value: string }>,
@@ -475,6 +483,7 @@ export const {
   clearMsStoreWorkspace,
   deleteSelectedMsStoreEntry,
   resetMsStoreDraft,
+  replaceMsStoreDraft,
   saveMsStoreDraft,
   selectMsStoreEntry,
   startNewMsStoreEntry,
