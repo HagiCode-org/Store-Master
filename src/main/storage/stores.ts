@@ -1,0 +1,164 @@
+import fs from 'node:fs/promises';
+import type {
+  MsStoreDataDataset,
+  MsStoreDataExportResult,
+  MsStoreDataImportResult,
+} from '../../shared/ms-store-data.js';
+import {
+  createEmptyMsStoreDataDataset,
+  createMsStoreDataImportResult,
+  isMsStoreDataDataset,
+  normalizeMsStoreDataDataset,
+} from '../../shared/ms-store-data.js';
+import {
+  isProductRecord,
+  isProductRecordArray,
+  normalizeProductRecords,
+  type ProductRecord,
+  resolveProductScopedFileName,
+} from '../../shared/products.js';
+import type { StoreDefinition } from '../../shared/storage.js';
+import { createStoreHandle } from './index.js';
+import { readStore, writeAtomically, writeStore } from './json-store.js';
+import { resolveStorePath } from './runtime-data-paths.js';
+
+const defaultProducts: ProductRecord[] = [
+  {
+    id: 'product-1',
+    productStorageId: 'prd-11111111-1111-4111-8111-111111111111',
+    name: 'Signal Desk',
+    description: 'Desktop release workspace for managing store metadata snapshots before publication.',
+    folderName: 'signal-desk',
+    relatedMarkets: ['Steam', 'MS Store'],
+    updatedAt: '2026-06-07 10:40',
+  },
+  {
+    id: 'product-2',
+    productStorageId: 'prd-22222222-2222-4222-8222-222222222222',
+    name: 'Patch Harbor',
+    description: 'Release engineering console for patch coordination and submission readiness checks.',
+    folderName: 'patch-harbor',
+    relatedMarkets: ['Steam'],
+    updatedAt: '2026-06-07 09:10',
+  },
+];
+
+function createProductSnapshotDefinition(product: ProductRecord): StoreDefinition<ProductRecord> {
+  return {
+    key: `product-snapshot:${product.productStorageId}`,
+    fileName: resolveProductScopedFileName(product.productStorageId, 'product.json'),
+    version: 1,
+    defaultData: product,
+    validate: isProductRecord,
+  };
+}
+
+function createMsStoreDataDefinition(productStorageId: string): StoreDefinition<MsStoreDataDataset> {
+  return {
+    key: `ms-store-data:${productStorageId}`,
+    fileName: resolveProductScopedFileName(productStorageId, 'ms-store-data.json'),
+    version: 1,
+    defaultData: createEmptyMsStoreDataDataset(productStorageId),
+    validate: (data): data is MsStoreDataDataset => {
+      return isMsStoreDataDataset(data) && data.productStorageId === productStorageId;
+    },
+    migrate: (_fromVersion, data) => normalizeMsStoreDataDataset(data, productStorageId) ?? createEmptyMsStoreDataDataset(productStorageId),
+  };
+}
+
+export const productsStore = createStoreHandle<ProductRecord[]>({
+  key: 'products',
+  fileName: 'products.json',
+  version: 2,
+  defaultData: defaultProducts,
+  validate: isProductRecordArray,
+  migrate: (_fromVersion, data) => normalizeProductRecords(data) ?? defaultProducts,
+});
+
+export function resolveProductStorePath(productStorageId: string, fileName: 'product.json' | 'ms-store-data.json'): string {
+  return resolveStorePath(resolveProductScopedFileName(productStorageId, fileName));
+}
+
+export async function syncProductSnapshots(products: ProductRecord[]): Promise<void> {
+  await Promise.all(products.map((product) => {
+    const definition = createProductSnapshotDefinition(product);
+    return writeStore(resolveStorePath(definition.fileName), definition, product);
+  }));
+}
+
+export async function readProducts(): Promise<ProductRecord[]> {
+  const result = await productsStore.read();
+  await syncProductSnapshots(result.data);
+  return result.data;
+}
+
+export async function writeProducts(products: ProductRecord[]): Promise<void> {
+  const normalizedProducts = normalizeProductRecords(products);
+
+  if (!normalizedProducts) {
+    throw new Error('Refusing to write invalid products payload.');
+  }
+
+  await productsStore.write(normalizedProducts);
+  await syncProductSnapshots(normalizedProducts);
+}
+
+export async function readProductMsStoreData(productStorageId: string): Promise<MsStoreDataDataset> {
+  const definition = createMsStoreDataDefinition(productStorageId);
+  const result = await readStore(resolveStorePath(definition.fileName), definition);
+  return result.data;
+}
+
+export async function writeProductMsStoreData(productStorageId: string, dataset: MsStoreDataDataset): Promise<void> {
+  const definition = createMsStoreDataDefinition(productStorageId);
+
+  if (dataset.productStorageId !== productStorageId || !definition.validate?.(dataset)) {
+    throw new Error(`Refusing to write invalid MS Store data for product ${productStorageId}`);
+  }
+
+  await writeStore(resolveStorePath(definition.fileName), definition, dataset);
+}
+
+export async function importProductMsStoreDataFromFile(productStorageId: string, filePath: string): Promise<MsStoreDataImportResult> {
+  try {
+    const raw = await fs.readFile(filePath, 'utf8');
+    const parsed = JSON.parse(raw) as unknown;
+    return createMsStoreDataImportResult(parsed, productStorageId, filePath);
+  } catch {
+    return {
+      success: false,
+      filePath,
+      errors: [{
+        field: 'dataset',
+        index: null,
+        messageKey: 'validation.msStore.importInvalidJson',
+      }],
+    };
+  }
+}
+
+export async function exportProductMsStoreDataToFile(filePath: string, dataset: MsStoreDataDataset): Promise<MsStoreDataExportResult> {
+  const normalizedDataset = normalizeMsStoreDataDataset(dataset, dataset.productStorageId);
+
+  if (!normalizedDataset || !isMsStoreDataDataset(normalizedDataset)) {
+    return {
+      success: false,
+      entryCount: dataset.entries.length,
+      error: 'Invalid MS Store dataset.',
+    };
+  }
+
+  await writeAtomically(filePath, `${JSON.stringify({
+    productStorageId: normalizedDataset.productStorageId,
+    exportedAt: new Date().toISOString(),
+    entries: normalizedDataset.entries,
+  }, null, 2)}\n`);
+
+  return {
+    success: true,
+    entryCount: normalizedDataset.entries.length,
+    filePath,
+  };
+}
+
+export type { ProductRecord } from '../../shared/products.js';
