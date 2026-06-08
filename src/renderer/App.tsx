@@ -1,12 +1,14 @@
-import { useDeferredValue, useEffect, useState } from 'react';
+import { useDeferredValue, useEffect, useRef, useState } from 'react';
 import { Boxes, FileStack, Languages, Settings2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { AppHeader } from '@/components/navigation/AppHeader';
 import { PrimarySidebar } from '@/components/navigation/PrimarySidebar';
 import { LanguagesPage } from '@/components/products/LanguagesPage';
 import { ProductProfilePage } from '@/components/products/ProductProfilePage';
 import { ProductsPage } from '@/components/products/ProductsPage';
 import { SettingsPage } from '@/components/settings/SettingsPage';
+import { cn } from '@/lib/utils';
 import { normalizeSupportedMsStoreLanguage } from '../shared/ms-store-data';
 import { cloneProductRelatedMarkets, getEnabledProductMarkets } from '../shared/products';
 import {
@@ -70,9 +72,11 @@ export default function App() {
   const msStoreExportStatus = useAppSelector((state) => state.msStoreData.exportStatus);
   const msStoreExportError = useAppSelector((state) => state.msStoreData.exportError);
   const msStoreExportPath = useAppSelector((state) => state.msStoreData.exportPath);
+  const msStoreSaveFeedback = useAppSelector((state) => state.msStoreData.saveFeedback);
   const currentLanguage = resolveSupportedLanguage(i18n.language);
   const [searchValue, setSearchValue] = useState('');
   const deferredSearchValue = useDeferredValue(searchValue);
+  const handledMsStoreSaveFeedbackRef = useRef(0);
 
   useEffect(() => {
     dispatch(initializeTheme(resolveInitialThemePreference(window.localStorage)));
@@ -86,6 +90,27 @@ export default function App() {
   useEffect(() => {
     document.documentElement.lang = currentLanguage;
   }, [currentLanguage]);
+
+  useEffect(() => {
+    if (msStoreSaveFeedback.nonce === 0 || msStoreSaveFeedback.nonce === handledMsStoreSaveFeedbackRef.current) {
+      return;
+    }
+
+    handledMsStoreSaveFeedbackRef.current = msStoreSaveFeedback.nonce;
+
+    if (msStoreSaveFeedback.status === 'succeeded') {
+      toast.success(t('msStore.saveSuccess'), {
+        description: t('msStore.saveSuccessDescription'),
+      });
+      return;
+    }
+
+    if (msStoreSaveFeedback.status === 'failed') {
+      toast.error(t('msStore.saveFailed'), {
+        description: t('msStore.saveFailedDescription'),
+      });
+    }
+  }, [msStoreSaveFeedback, t]);
 
   const filteredProducts = products.filter((product) => {
     const keyword = deferredSearchValue.trim().toLowerCase();
@@ -262,7 +287,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       <AppHeader
         currentLanguageLabel={getLanguageShortLabel(currentLanguage)}
         onAddProduct={handleAddProduct}
@@ -271,7 +296,7 @@ export default function App() {
         searchValue={searchValue}
       />
 
-      <div className="grid min-h-[calc(100vh-5.5rem)] grid-cols-[auto_minmax(0,1fr)]">
+      <div className="grid min-h-0 flex-1 grid-cols-[auto_minmax(0,1fr)]">
         <PrimarySidebar
           activeSection={activeSection}
           collapsed={sidebarCollapsed}
@@ -282,8 +307,8 @@ export default function App() {
           productCount={products.length}
         />
 
-        <main className="min-h-0 overflow-auto bg-[radial-gradient(circle_at_top_right,rgba(89,130,255,0.08),transparent_24%),linear-gradient(180deg,transparent_0%,rgba(15,23,42,0.04)_100%)] p-4 lg:p-6">
-          <div className="mx-auto flex min-h-full w-full max-w-[112rem] flex-col gap-4">
+        <main className="min-h-0 overflow-hidden bg-[radial-gradient(circle_at_top_right,rgba(89,130,255,0.08),transparent_24%),linear-gradient(180deg,transparent_0%,rgba(15,23,42,0.04)_100%)] p-4 lg:p-6">
+          <div className="mx-auto flex h-full min-h-0 w-full max-w-[112rem] flex-col gap-4">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 {t('shell.activeSectionLabel')}
@@ -293,7 +318,14 @@ export default function App() {
               </h2>
             </div>
 
-            <div className="min-h-0 flex-1">{content}</div>
+            <div
+              className={cn(
+                'min-h-0 flex-1',
+                activeSection === 'product-profile' ? 'overflow-hidden' : 'overflow-auto',
+              )}
+            >
+              {content}
+            </div>
           </div>
         </main>
       </div>

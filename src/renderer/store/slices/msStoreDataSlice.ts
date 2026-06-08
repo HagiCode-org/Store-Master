@@ -19,6 +19,12 @@ import {
 } from '../../../shared/ms-store-data';
 
 type AsyncStatus = 'idle' | 'loading' | 'succeeded' | 'failed';
+type SaveFeedbackStatus = 'idle' | 'succeeded' | 'failed';
+
+interface SaveFeedbackState {
+  nonce: number;
+  status: SaveFeedbackStatus;
+}
 
 export interface MsStoreDataDraft {
   id: string;
@@ -49,6 +55,7 @@ interface MsStoreDataState {
   exportStatus: AsyncStatus;
   exportError: string | null;
   exportPath: string | null;
+  saveFeedback: SaveFeedbackState;
 }
 
 function createDraftFromEntry(entry: MsStoreDataEntry): MsStoreDataDraft {
@@ -223,6 +230,10 @@ const initialState: MsStoreDataState = {
   exportStatus: 'idle',
   exportError: null,
   exportPath: null,
+  saveFeedback: {
+    nonce: 0,
+    status: 'idle',
+  },
 };
 
 const msStoreDataSlice = createSlice({
@@ -371,6 +382,10 @@ const msStoreDataSlice = createSlice({
 
       state.fieldErrors = fieldErrors;
       if (Object.keys(fieldErrors).length > 0) {
+        state.saveFeedback = {
+          nonce: state.saveFeedback.nonce + 1,
+          status: 'failed',
+        };
         return;
       }
 
@@ -384,6 +399,10 @@ const msStoreDataSlice = createSlice({
 
       state.selectedEntryId = normalizedEntry.id;
       state.draft = createDraftFromEntry(normalizedEntry);
+      state.saveFeedback = {
+        nonce: state.saveFeedback.nonce + 1,
+        status: 'succeeded',
+      };
       clearStatuses(state);
     },
     deleteSelectedMsStoreEntry(state) {

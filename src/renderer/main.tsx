@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { Provider } from 'react-redux';
 import { I18nextProvider } from 'react-i18next';
 import App from './App';
+import { Toaster } from '@/components/ui/sonner';
 import i18n from '@/locales';
 import { store, useAppDispatch } from '@/store';
 import { appStarted } from '@/store/listeners';
@@ -29,7 +30,10 @@ ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <Provider store={store}>
       <I18nextProvider i18n={i18n}>
-        <AppBootstrap />
+        <>
+          <AppBootstrap />
+          <Toaster closeButton richColors />
+        </>
       </I18nextProvider>
     </Provider>
   </React.StrictMode>
