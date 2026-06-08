@@ -33,6 +33,12 @@ import type {
   UpdateRepoResult,
   UpdateRepoTopicsResult,
 } from '../shared/api.js';
+import type {
+  MsStoreDataDataset,
+  MsStoreDataExportResult,
+  MsStoreDataImportResult,
+} from '../shared/ms-store-data.js';
+import type { ProductRecord } from '../shared/products.js';
 
 const deviceFlowEventChannel = 'hagihub:device-flow-update';
 
@@ -104,6 +110,17 @@ const hagihubApi = {
   },
 };
 
+const storeMasterApi = {
+  readProducts: () => ipcRenderer.invoke('store-master:read-products') as Promise<ProductRecord[]>,
+  writeProducts: (products: ProductRecord[]) => ipcRenderer.invoke('store-master:write-products', products) as Promise<boolean>,
+  readMsStoreData: (productStorageId: string) => ipcRenderer.invoke('store-master:read-ms-store-data', productStorageId) as Promise<MsStoreDataDataset>,
+  writeMsStoreData: (productStorageId: string, dataset: MsStoreDataDataset) => ipcRenderer.invoke('store-master:write-ms-store-data', productStorageId, dataset) as Promise<boolean>,
+  importMsStoreData: (productStorageId: string) => ipcRenderer.invoke('store-master:import-ms-store-data', productStorageId) as Promise<MsStoreDataImportResult>,
+  exportMsStoreData: (productStorageId: string, dataset: MsStoreDataDataset) => ipcRenderer.invoke('store-master:export-ms-store-data', productStorageId, dataset) as Promise<MsStoreDataExportResult>,
+};
+
 contextBridge.exposeInMainWorld('hagihub', hagihubApi);
+contextBridge.exposeInMainWorld('storeMaster', storeMasterApi);
 
 export type HagihubApi = typeof hagihubApi;
+export type StoreMasterApi = typeof storeMasterApi;

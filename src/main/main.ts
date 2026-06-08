@@ -1,7 +1,22 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { bootstrapStorage } from './storage/index.js';
+import {
+  exportProductMsStoreDataToFile,
+  importProductMsStoreDataFromFile,
+  readProducts,
+  readProductMsStoreData,
+  writeProducts,
+  writeProductMsStoreData,
+} from './storage/stores.js';
 import type { AppInfo, ExternalOpenResult, PlatformId } from '../shared/api.js';
+import type {
+  MsStoreDataDataset,
+  MsStoreDataExportResult,
+  MsStoreDataImportResult,
+} from '../shared/ms-store-data.js';
+import type { ProductRecord } from '../shared/products.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEV_RENDERER_HOST = '127.0.0.1';
@@ -116,7 +131,8 @@ function createWindow(): void {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await bootstrapStorage();
   createWindow();
 
   app.on('activate', () => {
@@ -137,3 +153,65 @@ ipcMain.handle('hagihub:get-app-info', (): AppInfo => createAppInfo());
 
 ipcMain.handle('open-external', async (_event, url: string): Promise<ExternalOpenResult> => openExternal(url));
 ipcMain.handle('hagihub:open-external', async (_event, url: string): Promise<ExternalOpenResult> => openExternal(url));
+ipcMain.handle('store-master:read-products', async () => {
+  return readProducts();
+});
+ipcMain.handle('store-master:write-products', async (_event, products: ProductRecord[]) => {
+  await writeProducts(products);
+  return true;
+});
+ipcMain.handle('store-master:read-ms-store-data', async (_event, productStorageId: string) => {
+  return readProductMsStoreData(productStorageId);
+});
+ipcMain.handle('store-master:write-ms-store-data', async (_event, productStorageId: string, dataset: MsStoreDataDataset) => {
+  await writeProductMsStoreData(productStorageId, dataset);
+  return true;
+});
+ipcMain.handle('store-master:import-ms-store-data', async (_event, productStorageId: string): Promise<MsStoreDataImportResult> => {
+  const window = BrowserWindow.getFocusedWindow() ?? mainWindow;
+  const selection = window ? await dialog.showOpenDialog(window, {
+    properties: ['openFile'],
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  }) : await dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+
+  const filePath = selection.filePaths[0];
+  if (selection.canceled || !filePath) {
+    return {
+      success: false,
+      cancelled: true,
+      errors: [],
+    };
+  }
+
+  return importProductMsStoreDataFromFile(productStorageId, filePath);
+});
+ipcMain.handle('store-master:export-ms-store-data', async (_event, productStorageId: string, dataset: MsStoreDataDataset): Promise<MsStoreDataExportResult> => {
+  const window = BrowserWindow.getFocusedWindow() ?? mainWindow;
+  const selection = window ? await dialog.showSaveDialog(window, {
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+    defaultPath: `${productStorageId}-ms-store-data.json`,
+  }) : await dialog.showSaveDialog({
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+    defaultPath: `${productStorageId}-ms-store-data.json`,
+  });
+
+  if (selection.canceled || !selection.filePath) {
+    return {
+      success: false,
+      cancelled: true,
+      entryCount: dataset.entries.length,
+    };
+  }
+
+  return exportProductMsStoreDataToFile(selection.filePath, dataset);
+});
+
+ipcMain.handle('store-master:export-ms-store-data-to-path', async (_event, filePath: string, dataset: MsStoreDataDataset): Promise<MsStoreDataExportResult> => {
+  return exportProductMsStoreDataToFile(filePath, dataset);
+});
+ipcMain.handle('store-master:import-ms-store-data-from-path', async (_event, productStorageId: string, filePath: string): Promise<MsStoreDataImportResult> => {
+  return importProductMsStoreDataFromFile(productStorageId, filePath);
+});
