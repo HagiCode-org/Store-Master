@@ -1,4 +1,4 @@
-import { useDeferredValue, useState } from 'react';
+import { memo, useDeferredValue, useMemo, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
@@ -71,6 +71,7 @@ interface ProductProfilePageProps {
 
 type InventoryFilter = 'all' | 'empty' | 'changed' | 'assets' | 'longText';
 type LocaleGroupStatus = 'ready' | 'needsReview' | 'new';
+type CoreDraftFieldKey = 'title' | 'subtitle' | 'shortDescription' | 'description';
 
 interface LocaleGroup {
   entries: MsStoreDataEntry[];
@@ -285,6 +286,118 @@ function FieldEditorControl({
   );
 }
 
+interface CoreFieldRowProps {
+  defaultValue: string;
+  error?: string;
+  fieldDefinition: MsStoreFieldDefinition;
+  fieldId: string;
+  fieldKey: CoreDraftFieldKey;
+  label: string;
+  localeValue: string;
+  onDefaultFieldChange: (fieldId: string, value: string) => void;
+  onDraftFieldChange: (field: CoreDraftFieldKey, value: string) => void;
+  placeholder: string;
+}
+
+const CoreFieldRow = memo(function CoreFieldRow({
+  defaultValue,
+  error,
+  fieldDefinition,
+  fieldId,
+  fieldKey,
+  label,
+  localeValue,
+  onDefaultFieldChange,
+  onDraftFieldChange,
+  placeholder,
+}: CoreFieldRowProps) {
+  return (
+    <div className="border-t border-border/70 px-4 py-3 [content-visibility:auto] [contain-intrinsic-size:120px]">
+      <div className="grid grid-cols-[minmax(0,12rem)_minmax(0,1fr)_minmax(0,1fr)] gap-3">
+        <div className="grid gap-1">
+          <p className="text-sm font-medium text-foreground">{label}</p>
+          <p className="text-xs text-muted-foreground">{fieldDefinition.field} · ID {fieldDefinition.id}</p>
+        </div>
+        <FieldEditorControl
+          ariaLabel={`${label} default`}
+          fieldDefinition={fieldDefinition}
+          onChange={(value) => onDefaultFieldChange(fieldId, value)}
+          placeholder={placeholder}
+          value={defaultValue}
+        />
+        <FieldEditorControl
+          ariaLabel={label}
+          fieldDefinition={fieldDefinition}
+          onChange={(value) => onDraftFieldChange(fieldKey, value)}
+          placeholder={placeholder}
+          value={localeValue}
+        />
+      </div>
+      {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
+    </div>
+  );
+}, (prev, next) => (
+  prev.defaultValue === next.defaultValue
+  && prev.error === next.error
+  && prev.fieldDefinition.id === next.fieldDefinition.id
+  && prev.label === next.label
+  && prev.localeValue === next.localeValue
+  && prev.placeholder === next.placeholder
+));
+
+interface InventoryFieldRowProps {
+  defaultValue: string;
+  fieldDefinition: MsStoreFieldDefinition;
+  fieldStateLabel: string;
+  localeLabel: string;
+  localeValue: string;
+  onDefaultFieldChange: (fieldId: string, value: string) => void;
+  onDraftInventoryFieldChange: (fieldId: string, value: string) => void;
+}
+
+const InventoryFieldRow = memo(function InventoryFieldRow({
+  defaultValue,
+  fieldDefinition,
+  fieldStateLabel,
+  localeLabel,
+  localeValue,
+  onDefaultFieldChange,
+  onDraftInventoryFieldChange,
+}: InventoryFieldRowProps) {
+  return (
+    <div className="grid grid-cols-[minmax(0,14rem)_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b border-border/60 px-4 py-3 [content-visibility:auto] [contain-intrinsic-size:96px]">
+      <div className="grid gap-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-medium text-foreground">{fieldDefinition.field}</p>
+          <Badge variant="outline">ID {fieldDefinition.id}</Badge>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>{fieldDefinition.type}</span>
+          <span>{fieldStateLabel}</span>
+        </div>
+      </div>
+      <FieldEditorControl
+        ariaLabel={`${fieldDefinition.field} default`}
+        fieldDefinition={fieldDefinition}
+        onChange={(value) => onDefaultFieldChange(fieldDefinition.id, value)}
+        value={defaultValue}
+      />
+      <FieldEditorControl
+        ariaLabel={`${fieldDefinition.field} ${localeLabel}`}
+        fieldDefinition={fieldDefinition}
+        onChange={(value) => onDraftInventoryFieldChange(fieldDefinition.id, value)}
+        value={localeValue}
+      />
+    </div>
+  );
+}, (prev, next) => (
+  prev.defaultValue === next.defaultValue
+  && prev.fieldDefinition.id === next.fieldDefinition.id
+  && prev.fieldStateLabel === next.fieldStateLabel
+  && prev.localeLabel === next.localeLabel
+  && prev.localeValue === next.localeValue
+));
+
 export function ProductProfilePage({
   currentProduct,
   defaultValues,
@@ -343,22 +456,22 @@ export function ProductProfilePage({
     );
   }
 
-  const productOptions = products.map((product) => ({
+  const productOptions = useMemo(() => products.map((product) => ({
     value: product.id,
     label: product.name || t('products.untitledProduct'),
     description: product.folderName || t('sidebar.folderFallback'),
-  }));
+  })), [products, t]);
 
-  const localeGroups = buildLocaleGroups(entries, t('msStore.untitledEntry'));
+  const localeGroups = useMemo(() => buildLocaleGroups(entries, t('msStore.untitledEntry')), [entries, t]);
   const draftLocale = draft?.locale.trim() ?? '';
   const draftLocaleKey = normalizeLocaleKey(draftLocale);
   const hasDraftLocaleGroup = draftLocaleKey.length > 0 && localeGroups.some((group) => group.key === draftLocaleKey);
-  const visibleLocaleGroups = hasDraftLocaleGroup || draftLocale.length === 0
+  const visibleLocaleGroups = useMemo(() => (hasDraftLocaleGroup || draftLocale.length === 0
     ? localeGroups
     : sortLocaleValues([...localeGroups.map((group) => group.locale), draftLocale]).map((locale) => (
         localeGroups.find((group) => group.key === normalizeLocaleKey(locale))
         ?? createDraftLocaleGroup(locale, t('msStore.untitledEntry'))
-      ));
+      ))), [draftLocale, hasDraftLocaleGroup, localeGroups, t]);
   const activeLocale = draftLocale || visibleLocaleGroups[0]?.locale || '';
   const activeLocaleKey = normalizeLocaleKey(activeLocale);
   const activeLocaleGroup = visibleLocaleGroups.find((group) => group.key === activeLocaleKey) ?? null;
@@ -369,9 +482,15 @@ export function ProductProfilePage({
     ?? localeEntries.find((entry) => normalizeMarketKey(entry.market) === normalizeMarketKey(draft?.market ?? ''))
     ?? localeEntries[0]
     ?? null;
-  const knownMarkets = Array.from(new Set(entries.map((entry) => entry.market.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right));
-  const localeMarkets = Array.from(new Set(localeEntries.map((entry) => entry.market.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right));
-  const marketSuggestions = Array.from(new Set([...localeMarkets, ...knownMarkets]));
+  const knownMarkets = useMemo(
+    () => Array.from(new Set(entries.map((entry) => entry.market.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right)),
+    [entries],
+  );
+  const localeMarkets = useMemo(
+    () => Array.from(new Set(localeEntries.map((entry) => entry.market.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right)),
+    [localeEntries],
+  );
+  const marketSuggestions = useMemo(() => Array.from(new Set([...localeMarkets, ...knownMarkets])), [knownMarkets, localeMarkets]);
   const requiredFilledCount = [
     draft?.storeId.trim().length ? 'storeId' : null,
     ...requiredFieldIds.map((fieldId) => ((draft?.fieldValues[fieldId] ?? '').trim().length > 0 ? fieldId : null)),
@@ -380,7 +499,7 @@ export function ProductProfilePage({
   const changedCount = Object.entries(draft?.fieldValues ?? {}).filter(([fieldId, value]) => value.trim().length > 0 && value.trim() !== (defaultValues[fieldId] ?? '').trim()).length;
 
   const normalizedQuery = deferredFieldQuery.trim().toLowerCase();
-  const inventoryFields = msStoreFieldRegistry.filter((fieldDefinition) => {
+  const inventoryFields = useMemo(() => msStoreFieldRegistry.filter((fieldDefinition) => {
     if (coreFieldIdSet.has(fieldDefinition.id)) {
       return false;
     }
@@ -406,7 +525,7 @@ export function ProductProfilePage({
     }
 
     return true;
-  });
+  }), [defaultValues, draft, inventoryFilter, normalizedQuery]);
 
   const statusBadge = loadStatus === 'loading'
     ? t('msStore.loading')
@@ -414,10 +533,10 @@ export function ProductProfilePage({
       ? t('msStore.loadFailed')
       : null;
 
-  const localeOptions = supportedMsStoreLanguages.map((locale) => ({
+  const localeOptions = useMemo(() => supportedMsStoreLanguages.map((locale) => ({
     value: locale,
     label: getMsStoreLanguageLabel(locale),
-  }));
+  })), []);
 
   const inventoryFilters: Array<{ id: InventoryFilter; label: string }> = [
     { id: 'all', label: t('msStore.inventory.filters.all') },
@@ -774,29 +893,19 @@ export function ProductProfilePage({
                   }
 
                   return (
-                    <div className="border-t border-border/70 px-4 py-3" key={coreField.fieldId}>
-                      <div className="grid grid-cols-[minmax(0,12rem)_minmax(0,1fr)_minmax(0,1fr)] gap-3">
-                        <div className="grid gap-1">
-                          <p className="text-sm font-medium text-foreground">{coreField.label}</p>
-                          <p className="text-xs text-muted-foreground">{fieldDefinition.field} · ID {fieldDefinition.id}</p>
-                        </div>
-                        <FieldEditorControl
-                          ariaLabel={`${coreField.label} ${t('msStore.defaultColumnLabel')}`}
-                          fieldDefinition={fieldDefinition}
-                          onChange={(value) => onDefaultFieldChange(coreField.fieldId, value)}
-                          placeholder={coreField.placeholder}
-                          value={defaultValues[coreField.fieldId] ?? ''}
-                        />
-                        <FieldEditorControl
-                          ariaLabel={coreField.label}
-                          fieldDefinition={fieldDefinition}
-                          onChange={(value) => onDraftFieldChange(coreField.key, value)}
-                          placeholder={coreField.placeholder}
-                          value={draft?.[coreField.key] ?? ''}
-                        />
-                      </div>
-                      {coreField.error ? <p className="mt-2 text-sm text-destructive">{t(coreField.error)}</p> : null}
-                    </div>
+                    <CoreFieldRow
+                      defaultValue={defaultValues[coreField.fieldId] ?? ''}
+                      error={coreField.error ? t(coreField.error) : undefined}
+                      fieldDefinition={fieldDefinition}
+                      fieldId={coreField.fieldId}
+                      fieldKey={coreField.key}
+                      key={coreField.fieldId}
+                      label={coreField.label}
+                      localeValue={draft?.[coreField.key] ?? ''}
+                      onDefaultFieldChange={onDefaultFieldChange}
+                      onDraftFieldChange={onDraftFieldChange}
+                      placeholder={coreField.placeholder}
+                    />
                   );
                 })}
               </div>
@@ -850,30 +959,16 @@ export function ProductProfilePage({
                       const fieldState = getInventoryFieldState(fieldDefinition, draft, defaultValues);
 
                       return (
-                        <div className="grid grid-cols-[minmax(0,14rem)_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b border-border/60 px-4 py-3" key={fieldDefinition.id}>
-                          <div className="grid gap-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-sm font-medium text-foreground">{fieldDefinition.field}</p>
-                              <Badge variant="outline">ID {fieldDefinition.id}</Badge>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                              <span>{fieldDefinition.type}</span>
-                              <span>{t(`msStore.inventory.fieldState.${fieldState}`)}</span>
-                            </div>
-                          </div>
-                          <FieldEditorControl
-                            ariaLabel={`${fieldDefinition.field} ${t('msStore.defaultColumnLabel')}`}
-                            fieldDefinition={fieldDefinition}
-                            onChange={(value) => onDefaultFieldChange(fieldDefinition.id, value)}
-                            value={defaultValues[fieldDefinition.id] ?? ''}
-                          />
-                          <FieldEditorControl
-                            ariaLabel={`${fieldDefinition.field} ${currentLocaleLabel}`}
-                            fieldDefinition={fieldDefinition}
-                            onChange={(value) => onDraftInventoryFieldChange(fieldDefinition.id, value)}
-                            value={draft?.fieldValues[fieldDefinition.id] ?? ''}
-                          />
-                        </div>
+                        <InventoryFieldRow
+                          defaultValue={defaultValues[fieldDefinition.id] ?? ''}
+                          fieldDefinition={fieldDefinition}
+                          fieldStateLabel={t(`msStore.inventory.fieldState.${fieldState}`)}
+                          key={fieldDefinition.id}
+                          localeLabel={currentLocaleLabel}
+                          localeValue={draft?.fieldValues[fieldDefinition.id] ?? ''}
+                          onDefaultFieldChange={onDefaultFieldChange}
+                          onDraftInventoryFieldChange={onDraftInventoryFieldChange}
+                        />
                       );
                     })}
                   </div>
