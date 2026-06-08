@@ -10,7 +10,10 @@ import {
   createEmptyMsStoreDataDataset,
   createEmptyMsStoreDataEntry,
   createTimestampLabel,
+  getMsStoreEntryCoreFieldValue,
+  msStoreCoreFieldIds,
   normalizeKeywords,
+  normalizeSupportedMsStoreLanguage,
   validateMsStoreDataEntry,
 } from '../../../shared/ms-store-data';
 
@@ -26,6 +29,7 @@ export interface MsStoreDataDraft {
   subtitle: string;
   shortDescription: string;
   description: string;
+  fieldValues: Record<string, string>;
   keywordsText: string;
   createdAt: string;
   updatedAt: string;
@@ -33,6 +37,7 @@ export interface MsStoreDataDraft {
 
 interface MsStoreDataState {
   activeProductStorageId: string;
+  defaultValues: Record<string, string>;
   entries: MsStoreDataEntry[];
   selectedEntryId: string;
   draft: MsStoreDataDraft | null;
@@ -50,6 +55,11 @@ interface MsStoreDataState {
 function createDraftFromEntry(entry: MsStoreDataEntry): MsStoreDataDraft {
   return {
     ...entry,
+    title: getMsStoreEntryCoreFieldValue(entry, 'title'),
+    subtitle: getMsStoreEntryCoreFieldValue(entry, 'subtitle'),
+    shortDescription: getMsStoreEntryCoreFieldValue(entry, 'shortDescription'),
+    description: getMsStoreEntryCoreFieldValue(entry, 'description'),
+    fieldValues: { ...entry.fieldValues },
     keywordsText: entry.keywords.join(', '),
   };
 }
@@ -61,6 +71,8 @@ function createDraftForProduct(productStorageId: string): MsStoreDataDraft {
 function createDatasetFromState(state: MsStoreDataState): MsStoreDataDataset {
   return {
     productStorageId: state.activeProductStorageId,
+    version: 2,
+    defaultValues: state.defaultValues,
     entries: state.entries,
   };
 }
@@ -99,23 +111,47 @@ function hydrateSelection(state: MsStoreDataState): void {
   state.draft = state.activeProductStorageId ? createDraftForProduct(state.activeProductStorageId) : null;
 }
 
+function syncCoreFieldValue(fieldValues: Record<string, string>, fieldId: string, value: string): Record<string, string> {
+  const nextFieldValues = { ...fieldValues };
+
+  if (value.length === 0) {
+    delete nextFieldValues[fieldId];
+  } else {
+    nextFieldValues[fieldId] = value;
+  }
+
+  return nextFieldValues;
+}
+
 function normalizeDraft(draft: MsStoreDataDraft): MsStoreDataEntry {
   const timestamp = createTimestampLabel();
+  let fieldValues = { ...draft.fieldValues };
+
+  fieldValues = syncCoreFieldValue(fieldValues, msStoreCoreFieldIds.title, draft.title);
+  fieldValues = syncCoreFieldValue(fieldValues, msStoreCoreFieldIds.subtitle, draft.subtitle);
+  fieldValues = syncCoreFieldValue(fieldValues, msStoreCoreFieldIds.shortDescription, draft.shortDescription);
+  fieldValues = syncCoreFieldValue(fieldValues, msStoreCoreFieldIds.description, draft.description);
 
   return {
     id: draft.id,
     productStorageId: draft.productStorageId,
-    locale: draft.locale.trim(),
+    locale: normalizeSupportedMsStoreLanguage(draft.locale) ?? draft.locale.trim(),
     market: draft.market.trim(),
     storeId: draft.storeId.trim(),
-    title: draft.title.trim(),
-    subtitle: draft.subtitle.trim(),
-    shortDescription: draft.shortDescription.trim(),
-    description: draft.description.trim(),
     keywords: normalizeKeywords(draft.keywordsText),
+    fieldValues,
     createdAt: draft.createdAt,
     updatedAt: timestamp,
   };
+}
+
+function clearStatuses(state: MsStoreDataState): void {
+  state.importStatus = 'idle';
+  state.importError = null;
+  state.importErrors = [];
+  state.exportStatus = 'idle';
+  state.exportError = null;
+  state.exportPath = null;
 }
 
 export const loadMsStoreData = createAsyncThunk<MsStoreDataDataset, string, { rejectValue: string }>(
@@ -173,6 +209,7 @@ export const exportMsStoreData = createAsyncThunk<
 
 const initialState: MsStoreDataState = {
   activeProductStorageId: '',
+  defaultValues: {},
   entries: [],
   selectedEntryId: '',
   draft: null,
@@ -193,18 +230,14 @@ const msStoreDataSlice = createSlice({
   reducers: {
     clearMsStoreWorkspace(state) {
       state.activeProductStorageId = '';
+      state.defaultValues = {};
       state.entries = [];
       state.selectedEntryId = '';
       state.draft = null;
       state.fieldErrors = {};
       state.loadStatus = 'idle';
       state.loadError = null;
-      state.importStatus = 'idle';
-      state.importError = null;
-      state.importErrors = [];
-      state.exportStatus = 'idle';
-      state.exportError = null;
-      state.exportPath = null;
+      clearStatuses(state);
     },
     selectMsStoreEntry(state, action: PayloadAction<string>) {
       const entry = findEntry(state.entries, action.payload);
@@ -235,6 +268,21 @@ const msStoreDataSlice = createSlice({
       }
 
       state.draft[action.payload.field] = action.payload.value;
+
+      const fieldId = action.payload.field === 'title'
+        ? msStoreCoreFieldIds.title
+        : action.payload.field === 'subtitle'
+          ? msStoreCoreFieldIds.subtitle
+          : action.payload.field === 'shortDescription'
+            ? msStoreCoreFieldIds.shortDescription
+            : action.payload.field === 'description'
+              ? msStoreCoreFieldIds.description
+              : null;
+
+      if (fieldId) {
+        state.draft.fieldValues = syncCoreFieldValue(state.draft.fieldValues, fieldId, action.payload.value);
+      }
+
       const errorField = action.payload.field === 'keywordsText'
         ? 'keywords'
         : action.payload.field === 'subtitle'
@@ -244,11 +292,51 @@ const msStoreDataSlice = createSlice({
       if (errorField) {
         delete state.fieldErrors[errorField];
       }
-      state.importStatus = 'idle';
-      state.importError = null;
-      state.importErrors = [];
-      state.exportStatus = 'idle';
-      state.exportError = null;
+
+      clearStatuses(state);
+    },
+    updateMsStoreDraftInventoryField(
+      state,
+      action: PayloadAction<{ fieldId: string; value: string }>,
+    ) {
+      if (!state.draft) {
+        return;
+      }
+
+      state.draft.fieldValues = syncCoreFieldValue(state.draft.fieldValues, action.payload.fieldId, action.payload.value);
+
+      if (action.payload.fieldId === msStoreCoreFieldIds.title) {
+        state.draft.title = action.payload.value;
+        delete state.fieldErrors.title;
+      }
+
+      if (action.payload.fieldId === msStoreCoreFieldIds.subtitle) {
+        state.draft.subtitle = action.payload.value;
+      }
+
+      if (action.payload.fieldId === msStoreCoreFieldIds.shortDescription) {
+        state.draft.shortDescription = action.payload.value;
+        delete state.fieldErrors.shortDescription;
+      }
+
+      if (action.payload.fieldId === msStoreCoreFieldIds.description) {
+        state.draft.description = action.payload.value;
+        delete state.fieldErrors.description;
+      }
+
+      clearStatuses(state);
+    },
+    updateMsStoreDefaultFieldValue(
+      state,
+      action: PayloadAction<{ fieldId: string; value: string }>,
+    ) {
+      if (action.payload.value.length === 0) {
+        delete state.defaultValues[action.payload.fieldId];
+      } else {
+        state.defaultValues[action.payload.fieldId] = action.payload.value;
+      }
+
+      clearStatuses(state);
     },
     resetMsStoreDraft(state) {
       hydrateSelection(state);
@@ -281,11 +369,7 @@ const msStoreDataSlice = createSlice({
 
       state.selectedEntryId = normalizedEntry.id;
       state.draft = createDraftFromEntry(normalizedEntry);
-      state.importStatus = 'idle';
-      state.importError = null;
-      state.importErrors = [];
-      state.exportStatus = 'idle';
-      state.exportError = null;
+      clearStatuses(state);
     },
     deleteSelectedMsStoreEntry(state) {
       const entryId = state.selectedEntryId || state.draft?.id;
@@ -296,24 +380,18 @@ const msStoreDataSlice = createSlice({
 
       state.entries = state.entries.filter((entry) => entry.id !== entryId);
       state.fieldErrors = {};
-      state.importStatus = 'idle';
-      state.importError = null;
-      state.importErrors = [];
+      clearStatuses(state);
       hydrateSelection(state);
     },
     clearMsStoreMessages(state) {
-      state.importStatus = 'idle';
-      state.importError = null;
-      state.importErrors = [];
-      state.exportStatus = 'idle';
-      state.exportError = null;
-      state.exportPath = null;
+      clearStatuses(state);
     },
   },
   extraReducers: (builder) => {
     builder
       .addCase(loadMsStoreData.pending, (state, action) => {
         state.activeProductStorageId = action.meta.arg;
+        state.defaultValues = {};
         state.loadStatus = 'loading';
         state.loadError = null;
         state.entries = [];
@@ -323,16 +401,16 @@ const msStoreDataSlice = createSlice({
       })
       .addCase(loadMsStoreData.fulfilled, (state, action) => {
         state.activeProductStorageId = action.payload.productStorageId;
+        state.defaultValues = action.payload.defaultValues;
         state.entries = action.payload.entries;
         state.loadStatus = 'succeeded';
         state.loadError = null;
         state.fieldErrors = {};
-        state.importStatus = 'idle';
-        state.importError = null;
-        state.importErrors = [];
+        clearStatuses(state);
         hydrateSelection(state);
       })
       .addCase(loadMsStoreData.rejected, (state, action) => {
+        state.defaultValues = {};
         state.entries = [];
         state.selectedEntryId = '';
         state.draft = state.activeProductStorageId ? createDraftForProduct(state.activeProductStorageId) : null;
@@ -347,6 +425,7 @@ const msStoreDataSlice = createSlice({
       .addCase(importMsStoreData.fulfilled, (state, action) => {
         if (action.payload.success) {
           state.activeProductStorageId = action.payload.dataset.productStorageId;
+          state.defaultValues = action.payload.dataset.defaultValues;
           state.entries = action.payload.dataset.entries;
           state.selectedEntryId = '';
           state.fieldErrors = {};
@@ -380,7 +459,7 @@ const msStoreDataSlice = createSlice({
         }
 
         state.exportStatus = action.payload.cancelled ? 'idle' : 'failed';
-        state.exportError = action.payload.cancelled ? null : action.payload.error ?? i18n.t('msStore.exportFailed');
+        state.exportError = action.payload.cancelled ? null : action.payload.error;
         state.exportPath = null;
       })
       .addCase(exportMsStoreData.rejected, (state, action) => {
@@ -399,13 +478,15 @@ export const {
   saveMsStoreDraft,
   selectMsStoreEntry,
   startNewMsStoreEntry,
+  updateMsStoreDefaultFieldValue,
   updateMsStoreDraftField,
+  updateMsStoreDraftInventoryField,
 } = msStoreDataSlice.actions;
 
 export function selectMsStoreDataset(state: { msStoreData: MsStoreDataState }): MsStoreDataDataset {
   return createDatasetFromState(state.msStoreData);
 }
 
-export type { MsStoreDataDataset, MsStoreDataEntry, MsStoreDataImportError, MsStoreDataValidationErrors };
+export type MsStoreDataStateShape = MsStoreDataState;
 
 export default msStoreDataSlice.reducer;
