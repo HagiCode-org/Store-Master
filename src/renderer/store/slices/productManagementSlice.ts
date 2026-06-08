@@ -1,18 +1,16 @@
-import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
+import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit';
+import i18n from '@/locales';
 import { validateProductFolderName } from '@/lib/productFolderName';
+import { createTimestampLabel } from '../../../shared/ms-store-data';
+import {
+  generateProductStorageId,
+  normalizeProductRecords,
+  supportedMarkets,
+  type ProductRecord,
+  type SupportedMarket,
+} from '../../../shared/products';
 
-export const supportedMarkets = ['Steam', 'MS Store'] as const;
-
-export type SupportedMarket = (typeof supportedMarkets)[number];
-
-export interface ProductRecord {
-  id: string;
-  name: string;
-  description: string;
-  folderName: string;
-  relatedMarkets: SupportedMarket[];
-  updatedAt: string;
-}
+type LoadStatus = 'idle' | 'loading' | 'succeeded' | 'failed';
 
 export interface ProductDraft {
   name: string;
@@ -33,26 +31,18 @@ interface ProductManagementState {
   draft: ProductDraft;
   fieldErrors: ProductFieldErrors;
   supportedMarkets: readonly SupportedMarket[];
+  loadStatus: LoadStatus;
+  loadError: string | null;
 }
 
-const initialProducts: ProductRecord[] = [
-  {
-    id: 'product-1',
-    name: 'Signal Desk',
-    description: 'Desktop release workspace for managing store metadata snapshots before publication.',
-    folderName: 'signal-desk',
-    relatedMarkets: ['Steam', 'MS Store'],
-    updatedAt: '2026-06-07 10:40',
-  },
-  {
-    id: 'product-2',
-    name: 'Patch Harbor',
-    description: 'Release engineering console for patch coordination and submission readiness checks.',
-    folderName: 'patch-harbor',
-    relatedMarkets: ['Steam'],
-    updatedAt: '2026-06-07 09:10',
-  },
-];
+function createEmptyDraft(): ProductDraft {
+  return {
+    name: '',
+    description: '',
+    folderName: '',
+    relatedMarkets: [],
+  };
+}
 
 function createDraft(product: ProductRecord): ProductDraft {
   return {
@@ -70,17 +60,6 @@ function nextProductId(products: ProductRecord[]): string {
   }, 0);
 
   return `product-${highestId + 1}`;
-}
-
-function getTimestampLabel(): string {
-  return new Intl.DateTimeFormat('sv-SE', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(new Date()).replace(' ', ' ');
 }
 
 export function validateProductDraft(draft: ProductDraft): ProductFieldErrors {
@@ -103,12 +82,29 @@ export function validateProductDraft(draft: ProductDraft): ProductFieldErrors {
   return errors;
 }
 
+export const loadProducts = createAsyncThunk<ProductRecord[], void, { rejectValue: string }>(
+  'productManagement/loadProducts',
+  async (_, { rejectWithValue }) => {
+    try {
+      return await window.storeMaster.readProducts();
+    } catch (error) {
+      return rejectWithValue(
+        error instanceof Error && error.message.trim().length > 0
+          ? error.message
+          : i18n.t('products.loadFailed'),
+      );
+    }
+  },
+);
+
 const initialState: ProductManagementState = {
-  products: initialProducts,
-  selectedProductId: initialProducts[0].id,
-  draft: createDraft(initialProducts[0]),
+  products: [],
+  selectedProductId: '',
+  draft: createEmptyDraft(),
   fieldErrors: {},
   supportedMarkets,
+  loadStatus: 'idle',
+  loadError: null,
 };
 
 const productManagementSlice = createSlice({
@@ -129,6 +125,7 @@ const productManagementSlice = createSlice({
     createProduct(state) {
       const product: ProductRecord = {
         id: nextProductId(state.products),
+        productStorageId: generateProductStorageId(),
         name: '',
         description: '',
         folderName: '',
@@ -167,6 +164,8 @@ const productManagementSlice = createSlice({
       const selectedProduct = state.products.find((product) => product.id === state.selectedProductId);
 
       if (!selectedProduct) {
+        state.draft = createEmptyDraft();
+        state.fieldErrors = {};
         return;
       }
 
@@ -194,15 +193,47 @@ const productManagementSlice = createSlice({
           ? {
               ...product,
               ...normalizedDraft,
-              updatedAt: getTimestampLabel(),
+              updatedAt: createTimestampLabel(),
             }
           : product
       ));
       state.draft = normalizedDraft;
     },
   },
+  extraReducers: (builder) => {
+    builder
+      .addCase(loadProducts.pending, (state) => {
+        state.loadStatus = 'loading';
+        state.loadError = null;
+      })
+      .addCase(loadProducts.fulfilled, (state, action) => {
+        state.products = normalizeProductRecords(action.payload) ?? [];
+        state.loadStatus = 'succeeded';
+        state.loadError = null;
+        state.fieldErrors = {};
+
+        const firstProduct = state.products[0];
+        if (!firstProduct) {
+          state.selectedProductId = '';
+          state.draft = createEmptyDraft();
+          return;
+        }
+
+        state.selectedProductId = firstProduct.id;
+        state.draft = createDraft(firstProduct);
+      })
+      .addCase(loadProducts.rejected, (state, action) => {
+        state.products = [];
+        state.selectedProductId = '';
+        state.draft = createEmptyDraft();
+        state.loadStatus = 'failed';
+        state.loadError = action.payload ?? i18n.t('products.loadFailed');
+      });
+  },
 });
 
 export const { selectProduct, createProduct, updateDraftField, toggleDraftMarket, resetDraft, saveDraft } = productManagementSlice.actions;
+
+export type { ProductRecord, SupportedMarket } from '../../../shared/products';
 
 export default productManagementSlice.reducer;
