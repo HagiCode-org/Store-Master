@@ -19,13 +19,12 @@ import {
   deleteSelectedMsStoreEntry,
   exportMsStoreData,
   importMsStoreData,
+  replaceMsStoreDraft,
   resetMsStoreDraft,
   saveMsStoreDraft,
   selectMsStoreEntry,
-  startNewMsStoreEntry,
   updateMsStoreDefaultFieldValue,
-  updateMsStoreDraftField,
-  updateMsStoreDraftInventoryField,
+  type MsStoreDataDraft,
 } from '@/store/slices/msStoreDataSlice';
 import {
   createProduct,
@@ -59,7 +58,6 @@ export default function App() {
   const msStoreDraft = useAppSelector((state) => state.msStoreData.draft);
   const msStoreDefaultValues = useAppSelector((state) => state.msStoreData.defaultValues);
   const msStoreEntries = useAppSelector((state) => state.msStoreData.entries);
-  const msStoreSelectedEntryId = useAppSelector((state) => state.msStoreData.selectedEntryId);
   const msStoreFieldErrors = useAppSelector((state) => state.msStoreData.fieldErrors);
   const msStoreLoadStatus = useAppSelector((state) => state.msStoreData.loadStatus);
   const msStoreLoadError = useAppSelector((state) => state.msStoreData.loadError);
@@ -161,12 +159,9 @@ export default function App() {
         importStatus={msStoreImportStatus}
         loadError={msStoreLoadError}
         loadStatus={msStoreLoadStatus}
-        onAddEntry={() => dispatch(startNewMsStoreEntry())}
         onClearMessages={() => dispatch(clearMsStoreMessages())}
         onDefaultFieldChange={(fieldId, value) => dispatch(updateMsStoreDefaultFieldValue({ fieldId, value }))}
         onDeleteEntry={() => dispatch(deleteSelectedMsStoreEntry())}
-        onDraftFieldChange={(field, value) => dispatch(updateMsStoreDraftField({ field, value }))}
-        onDraftInventoryFieldChange={(fieldId, value) => dispatch(updateMsStoreDraftInventoryField({ fieldId, value }))}
         onExport={() => {
           if (!currentProduct) {
             return;
@@ -191,11 +186,13 @@ export default function App() {
         }}
         onOpenProducts={() => dispatch(setActiveSection('products'))}
         onResetDraft={() => dispatch(resetMsStoreDraft())}
-        onSaveDraft={() => dispatch(saveMsStoreDraft())}
+        onSaveDraft={(nextDraft: MsStoreDataDraft) => {
+          dispatch(replaceMsStoreDraft(nextDraft));
+          dispatch(saveMsStoreDraft());
+        }}
         onSelectEntry={(entryId) => dispatch(selectMsStoreEntry(entryId))}
         onSelectProduct={(productId) => dispatch(selectProduct(productId))}
         products={products}
-        selectedEntryId={msStoreSelectedEntryId}
         selectedProductId={selectedProductId}
       />
     );
