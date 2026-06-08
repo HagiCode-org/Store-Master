@@ -11,6 +11,8 @@ interface ProductsPageProps {
   currentProduct: ProductRecord | null;
   draft: ProductDraft;
   fieldErrors: ProductFieldErrors;
+  loadError: string | null;
+  loadStatus: 'idle' | 'loading' | 'succeeded' | 'failed';
   onAddProduct: () => void;
   onDraftFieldChange: (field: keyof Pick<ProductDraft, 'name' | 'description' | 'folderName'>, value: string) => void;
   onResetDraft: () => void;
@@ -30,6 +32,8 @@ export function ProductsPage({
   currentProduct,
   draft,
   fieldErrors,
+  loadError,
+  loadStatus,
   onAddProduct,
   onDraftFieldChange,
   onResetDraft,
@@ -70,6 +74,8 @@ export function ProductsPage({
             </div>
 
             <div className="flex items-center gap-2">
+              {loadStatus === 'loading' ? <Badge variant="secondary">{t('products.loading')}</Badge> : null}
+              {loadStatus === 'failed' ? <Badge variant="secondary">{t('products.loadFailed')}</Badge> : null}
               <Badge variant="secondary">{t('products.countLabel', { count: products.length })}</Badge>
               <Button onClick={onAddProduct} size="sm" type="button">
                 {t('products.addProduct')}
@@ -118,7 +124,12 @@ export function ProductsPage({
               }) : (
                 <tr>
                   <td className="px-4 py-10 text-center text-muted-foreground" colSpan={4}>
-                    {t('products.noProducts')}
+                    {loadStatus === 'loading'
+                      ? t('products.loading')
+                      : loadStatus === 'failed'
+                        ? t('products.loadFailed')
+                        : t('products.noProducts')}
+                    {loadStatus === 'failed' && loadError ? <p className="mt-2 text-xs">{loadError}</p> : null}
                   </td>
                 </tr>
               )}

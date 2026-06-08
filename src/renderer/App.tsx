@@ -15,6 +15,17 @@ import {
 import { useAppDispatch, useAppSelector } from '@/store';
 import { setActiveSection, toggleSidebarCollapsed } from '@/store/slices/navigationSlice';
 import {
+  clearMsStoreMessages,
+  deleteSelectedMsStoreEntry,
+  exportMsStoreData,
+  importMsStoreData,
+  resetMsStoreDraft,
+  saveMsStoreDraft,
+  selectMsStoreEntry,
+  startNewMsStoreEntry,
+  updateMsStoreDraftField,
+} from '@/store/slices/msStoreDataSlice';
+import {
   createProduct,
   resetDraft,
   saveDraft,
@@ -40,7 +51,21 @@ export default function App() {
   const selectedProductId = useAppSelector((state) => state.productManagement.selectedProductId);
   const draft = useAppSelector((state) => state.productManagement.draft);
   const fieldErrors = useAppSelector((state) => state.productManagement.fieldErrors);
+  const loadError = useAppSelector((state) => state.productManagement.loadError);
+  const loadStatus = useAppSelector((state) => state.productManagement.loadStatus);
   const supportedMarkets = useAppSelector((state) => state.productManagement.supportedMarkets);
+  const msStoreDraft = useAppSelector((state) => state.msStoreData.draft);
+  const msStoreEntries = useAppSelector((state) => state.msStoreData.entries);
+  const msStoreSelectedEntryId = useAppSelector((state) => state.msStoreData.selectedEntryId);
+  const msStoreFieldErrors = useAppSelector((state) => state.msStoreData.fieldErrors);
+  const msStoreLoadStatus = useAppSelector((state) => state.msStoreData.loadStatus);
+  const msStoreLoadError = useAppSelector((state) => state.msStoreData.loadError);
+  const msStoreImportStatus = useAppSelector((state) => state.msStoreData.importStatus);
+  const msStoreImportError = useAppSelector((state) => state.msStoreData.importError);
+  const msStoreImportErrors = useAppSelector((state) => state.msStoreData.importErrors);
+  const msStoreExportStatus = useAppSelector((state) => state.msStoreData.exportStatus);
+  const msStoreExportError = useAppSelector((state) => state.msStoreData.exportError);
+  const msStoreExportPath = useAppSelector((state) => state.msStoreData.exportPath);
   const currentLanguage = resolveSupportedLanguage(i18n.language);
   const [searchValue, setSearchValue] = useState('');
   const deferredSearchValue = useDeferredValue(searchValue);
@@ -103,6 +128,8 @@ export default function App() {
       currentProduct={currentProduct}
       draft={draft}
       fieldErrors={fieldErrors}
+      loadError={loadError}
+      loadStatus={loadStatus}
       onAddProduct={handleAddProduct}
       onDraftFieldChange={(field, value) => dispatch(updateDraftField({ field, value }))}
       onResetDraft={() => dispatch(resetDraft())}
@@ -119,8 +146,49 @@ export default function App() {
     content = (
       <ProductProfilePage
         currentProduct={currentProduct}
-        onContinueBrowsing={() => dispatch(setActiveSection('settings'))}
+        draft={msStoreDraft}
+        entries={msStoreEntries}
+        exportError={msStoreExportError}
+        exportPath={msStoreExportPath}
+        exportStatus={msStoreExportStatus}
+        fieldErrors={msStoreFieldErrors}
+        importError={msStoreImportError}
+        importErrors={msStoreImportErrors}
+        importStatus={msStoreImportStatus}
+        loadError={msStoreLoadError}
+        loadStatus={msStoreLoadStatus}
+        onAddEntry={() => dispatch(startNewMsStoreEntry())}
+        onClearMessages={() => dispatch(clearMsStoreMessages())}
+        onDeleteEntry={() => dispatch(deleteSelectedMsStoreEntry())}
+        onDraftFieldChange={(field, value) => dispatch(updateMsStoreDraftField({ field, value }))}
+        onExport={() => {
+          if (!currentProduct) {
+            return;
+          }
+
+          void dispatch(exportMsStoreData({
+            productStorageId: currentProduct.productStorageId,
+            dataset: {
+              productStorageId: currentProduct.productStorageId,
+              entries: msStoreEntries,
+            },
+          }));
+        }}
+        onImport={() => {
+          if (!currentProduct) {
+            return;
+          }
+
+          void dispatch(importMsStoreData(currentProduct.productStorageId));
+        }}
         onOpenProducts={() => dispatch(setActiveSection('products'))}
+        onResetDraft={() => dispatch(resetMsStoreDraft())}
+        onSaveDraft={() => dispatch(saveMsStoreDraft())}
+        onSelectEntry={(entryId) => dispatch(selectMsStoreEntry(entryId))}
+        onSelectProduct={(productId) => dispatch(selectProduct(productId))}
+        products={products}
+        selectedEntryId={msStoreSelectedEntryId}
+        selectedProductId={selectedProductId}
       />
     );
   }
