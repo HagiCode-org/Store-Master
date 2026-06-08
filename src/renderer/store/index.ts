@@ -8,6 +8,7 @@ import actionManagementReducer from './slices/actionManagementSlice';
 import githubAccountsReducer from './slices/githubAccountsSlice';
 import githubActionsReducer from './slices/githubActionsSlice';
 import githubReposReducer from './slices/githubReposSlice';
+import msStoreDataReducer from './slices/msStoreDataSlice';
 import productManagementReducer from './slices/productManagementSlice';
 import repoWorkspacesReducer from './slices/repoWorkspaceSlice';
 import themeReducer from './slices/themeSlice';
@@ -18,6 +19,7 @@ export const createAppStore = () => configureStore({
     navigation: navigationReducer,
     theme: themeReducer,
     productManagement: productManagementReducer,
+    msStoreData: msStoreDataReducer,
     actionManagement: actionManagementReducer,
     githubAccounts: githubAccountsReducer,
     githubActions: githubActionsReducer,
