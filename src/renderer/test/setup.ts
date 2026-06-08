@@ -36,6 +36,8 @@ beforeEach(() => {
       writeProducts: vi.fn().mockResolvedValue(true),
       readMsStoreData: vi.fn().mockImplementation(async (productStorageId: string) => ({
         productStorageId,
+        version: 2,
+        defaultValues: {},
         entries: [],
       })),
       writeMsStoreData: vi.fn().mockResolvedValue(true),

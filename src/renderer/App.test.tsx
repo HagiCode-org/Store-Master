@@ -104,12 +104,17 @@ describe('Store Master app shell', () => {
       'prd-11111111-1111-4111-8111-111111111111',
       expect.objectContaining({
         productStorageId: 'prd-11111111-1111-4111-8111-111111111111',
+        version: 2,
+        defaultValues: {},
         entries: [expect.objectContaining({
           locale: 'en-US',
           market: 'US',
           storeId: '9NTEST123',
-          title: 'Signal Desk Deluxe',
-          shortDescription: 'Localized Store summary.',
+          fieldValues: expect.objectContaining({
+            '4': 'Signal Desk Deluxe',
+            '8': 'Localized Store summary.',
+            '2': 'Desktop release workspace for operators.',
+          }),
         })],
       }),
     );
@@ -138,14 +143,14 @@ describe('Store Master app shell', () => {
 
     importMock.mockResolvedValueOnce({
       success: false,
-      filePath: '/tmp/bad-import.json',
-      errors: [{ field: 'title', index: 0, messageKey: 'validation.msStore.titleRequired' }],
+      filePath: '/tmp/bad-import.csv',
+      errors: [{ field: 'fieldValues', index: 0, messageKey: 'validation.msStore.titleRequired' }],
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Import CSV' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Import was rejected. Existing data was not changed.')).toBeInTheDocument();
+      expect(screen.getByText('CSV import was rejected. Existing data was not changed.')).toBeInTheDocument();
     });
 
     expect(screen.getByText('Keep Me')).toBeInTheDocument();

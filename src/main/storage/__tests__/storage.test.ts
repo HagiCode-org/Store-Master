@@ -12,6 +12,7 @@ import {
   resolveProductStorePath,
   writeProductMsStoreData,
 } from '../stores.js';
+import { msStoreCoreFieldIds, msStoreCsvHeader, type MsStoreDataDataset } from '../../../shared/ms-store-data.js';
 import * as storageRegistry from '../storage-registry.js';
 import type { StoreDefinition } from '../../../shared/storage.js';
 
@@ -46,6 +47,7 @@ afterEach(async () => {
   resolveDataRoot({ reset: true });
   storageRegistry.clear();
   await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -288,6 +290,67 @@ describe('migration', () => {
 });
 
 describe('product-scoped storage helpers', () => {
+  function createMsStoreDataset(): MsStoreDataDataset {
+    const productStorageId = 'prd-11111111-1111-4111-8111-111111111111';
+
+    return {
+      productStorageId,
+      version: 2,
+      defaultValues: {
+        [msStoreCoreFieldIds.title]: 'Signal Desk',
+        '603': 'False',
+      },
+      entries: [
+        {
+          id: 'ms-1',
+          productStorageId,
+          locale: 'en-US',
+          market: 'US',
+          storeId: '9NTEST123',
+          keywords: ['desktop', 'release'],
+          fieldValues: {
+            [msStoreCoreFieldIds.title]: 'Signal Desk Deluxe',
+            [msStoreCoreFieldIds.subtitle]: 'Operator-ready',
+            [msStoreCoreFieldIds.shortDescription]: 'Localized Store summary.',
+            [msStoreCoreFieldIds.description]: 'Line 1\nLine 2, with comma',
+            '700': 'Feature callout',
+          },
+          createdAt: '2026-06-08 09:00',
+          updatedAt: '2026-06-08 09:00',
+        },
+        {
+          id: 'ms-2',
+          productStorageId,
+          locale: 'zh-CN',
+          market: 'CN',
+          storeId: '9NTEST456',
+          keywords: ['桌面', '发行'],
+          fieldValues: {
+            [msStoreCoreFieldIds.title]: '信号桌面',
+            [msStoreCoreFieldIds.shortDescription]: '本地化摘要。',
+            [msStoreCoreFieldIds.description]: '多语言描述。',
+          },
+          createdAt: '2026-06-08 09:05',
+          updatedAt: '2026-06-08 09:05',
+        },
+      ],
+    };
+  }
+
+  function createBlankMsStoreDataset(): MsStoreDataDataset {
+    const dataset = createMsStoreDataset();
+
+    return {
+      productStorageId: dataset.productStorageId,
+      version: 2,
+      defaultValues: {},
+      entries: dataset.entries.map((entry) => ({
+        ...entry,
+        fieldValues: {},
+      })),
+    };
+  }
+
   it('resolves product-scoped paths under the managed root', () => {
     expect(resolveProductStorePath('prd-11111111-1111-4111-8111-111111111111', 'ms-store-data.json')).toBe(
       path.join(resolveDataRoot(), 'products', 'prd-11111111-1111-4111-8111-111111111111', 'ms-store-data.json'),
@@ -295,96 +358,188 @@ describe('product-scoped storage helpers', () => {
   });
 
   it('writes and reads product-scoped MS Store datasets', async () => {
-    const dataset = {
-      productStorageId: 'prd-11111111-1111-4111-8111-111111111111',
-      entries: [
-        {
-          id: 'ms-1',
-          productStorageId: 'prd-11111111-1111-4111-8111-111111111111',
-          locale: 'en-US',
-          market: 'US',
-          storeId: '9NTEST123',
-          title: 'Signal Desk Deluxe',
-          subtitle: 'Operator-ready',
-          shortDescription: 'Localized Store summary.',
-          description: 'Desktop release workspace for operators.',
-          keywords: ['desktop', 'release'],
-          createdAt: '2026-06-08 09:00',
-          updatedAt: '2026-06-08 09:00',
-        },
-      ],
-    };
+    const dataset = createMsStoreDataset();
 
     await writeProductMsStoreData(dataset.productStorageId, dataset);
 
     await expect(readProductMsStoreData(dataset.productStorageId)).resolves.toEqual(dataset);
   });
 
-  it('exports and re-imports a validated MS Store dataset', async () => {
-    const dataset = {
-      productStorageId: 'prd-11111111-1111-4111-8111-111111111111',
-      entries: [
-        {
+  it('migrates legacy entry-based datasets into the expanded workspace model', async () => {
+    const productStorageId = 'prd-11111111-1111-4111-8111-111111111111';
+    const filePath = resolveProductStorePath(productStorageId, 'ms-store-data.json');
+
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify({
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      data: {
+        productStorageId,
+        entries: [{
           id: 'ms-1',
-          productStorageId: 'prd-11111111-1111-4111-8111-111111111111',
+          productStorageId,
           locale: 'en-US',
           market: 'US',
           storeId: '9NTEST123',
           title: 'Signal Desk Deluxe',
-          subtitle: '',
+          subtitle: 'Operator-ready',
           shortDescription: 'Localized Store summary.',
-          description: 'Desktop release workspace for operators.',
+          description: 'Legacy body text.',
           keywords: ['desktop', 'release'],
           createdAt: '2026-06-08 09:00',
           updatedAt: '2026-06-08 09:00',
+        }],
+      },
+    }));
+
+    const result = await readProductMsStoreData(productStorageId);
+
+    expect(result).toEqual({
+      productStorageId,
+      version: 2,
+      defaultValues: {},
+      entries: [expect.objectContaining({
+        locale: 'en-US',
+        market: 'US',
+        storeId: '9NTEST123',
+        fieldValues: {
+          [msStoreCoreFieldIds.title]: 'Signal Desk Deluxe',
+          [msStoreCoreFieldIds.subtitle]: 'Operator-ready',
+          [msStoreCoreFieldIds.shortDescription]: 'Localized Store summary.',
+          [msStoreCoreFieldIds.description]: 'Legacy body text.',
         },
-      ],
-    };
-    const exportPath = path.join(tmpDir, 'ms-store-export.json');
+      })],
+    });
+  });
+
+  it('exports BOM-prefixed Microsoft CSV and imports it back into the expanded workspace', async () => {
+    const dataset = createMsStoreDataset();
+    const exportPath = path.join(tmpDir, 'win_store.csv');
+
+    await writeProductMsStoreData(dataset.productStorageId, dataset);
 
     const exportResult = await exportProductMsStoreDataToFile(exportPath, dataset);
+    const rawExport = await fs.readFile(exportPath, 'utf8');
+
+    expect(rawExport.startsWith(`\uFEFF${msStoreCsvHeader.join(',')}\r\n`)).toBe(true);
+    expect(rawExport.includes('\r\n')).toBe(true);
+    expect(rawExport).toContain('"Line 1\nLine 2, with comma"');
+
     const importResult = await importProductMsStoreDataFromFile(dataset.productStorageId, exportPath);
 
     expect(exportResult).toEqual({
       success: true,
-      entryCount: 1,
+      entryCount: 2,
       filePath: exportPath,
     });
     expect(importResult).toMatchObject({
       success: true,
       filePath: exportPath,
-      dataset,
+      dataset: {
+        productStorageId: dataset.productStorageId,
+        version: 2,
+        defaultValues: dataset.defaultValues,
+        entries: [
+          expect.objectContaining({
+            locale: 'en-US',
+            market: 'US',
+            storeId: '9NTEST123',
+            keywords: ['desktop', 'release'],
+            fieldValues: expect.objectContaining({
+              [msStoreCoreFieldIds.title]: 'Signal Desk Deluxe',
+              [msStoreCoreFieldIds.description]: 'Line 1\nLine 2, with comma',
+              '700': 'Feature callout',
+            }),
+          }),
+          expect.objectContaining({
+            locale: 'zh-CN',
+            market: 'CN',
+            storeId: '9NTEST456',
+            keywords: ['桌面', '发行'],
+            fieldValues: expect.objectContaining({
+              [msStoreCoreFieldIds.title]: '信号桌面',
+              [msStoreCoreFieldIds.shortDescription]: '本地化摘要。',
+            }),
+          }),
+        ],
+      },
     });
   });
 
-  it('reports validation errors for invalid imported MS Store data', async () => {
-    const importPath = path.join(tmpDir, 'invalid-ms-store.json');
-    await fs.writeFile(importPath, JSON.stringify({
-      productStorageId: 'prd-11111111-1111-4111-8111-111111111111',
-      entries: [
-        {
-          id: 'ms-1',
-          productStorageId: 'prd-11111111-1111-4111-8111-111111111111',
-          locale: 'en-US',
-          market: 'US',
-          storeId: '9NTEST123',
-          title: '',
-          subtitle: '',
-          shortDescription: '',
-          description: 'Desktop release workspace for operators.',
-          keywords: ['desktop'],
-          createdAt: '2026-06-08 09:00',
-          updatedAt: '2026-06-08 09:00',
-        },
-      ],
-    }));
+  it('rejects invalid CSV headers without mutating the current dataset', async () => {
+    const dataset = createMsStoreDataset();
+    const importPath = path.join(tmpDir, 'invalid-header.csv');
 
-    const result = await importProductMsStoreDataFromFile('prd-11111111-1111-4111-8111-111111111111', importPath);
+    await writeProductMsStoreData(dataset.productStorageId, dataset);
+    await fs.writeFile(importPath, `\uFEFFWrong,ID,Type (Type),default,en-us,zh-cn,zh-hant,ja-jp,ko-kr,de-de,fr-fr,es-es,pt-br,ru-ru\r\n`);
+
+    const result = await importProductMsStoreDataFromFile(dataset.productStorageId, importPath);
+    const reloadedDataset = await readProductMsStoreData(dataset.productStorageId);
 
     expect(result).toMatchObject({
       success: false,
       filePath: importPath,
-      errors: [expect.objectContaining({ messageKey: 'validation.msStore.titleRequired' })],
+      errors: [expect.objectContaining({ messageKey: 'validation.msStore.importInvalidHeader' })],
+    });
+    expect(reloadedDataset).toEqual(dataset);
+  });
+
+  it('rejects CSV rows whose field metadata diverges from the fixed registry', async () => {
+    const dataset = createMsStoreDataset();
+    const importPath = path.join(tmpDir, 'invalid-field-metadata.csv');
+    const validSourcePath = path.join(tmpDir, 'valid-field-metadata-source.csv');
+
+    await writeProductMsStoreData(dataset.productStorageId, dataset);
+    await exportProductMsStoreDataToFile(validSourcePath, dataset);
+
+    const rawCsv = await fs.readFile(validSourcePath, 'utf8');
+    await fs.writeFile(importPath, rawCsv.replace('Description,2,Text', 'DescriptionX,2,Text'));
+
+    const result = await importProductMsStoreDataFromFile(dataset.productStorageId, importPath);
+
+    expect(result).toMatchObject({
+      success: false,
+      filePath: importPath,
+      errors: [expect.objectContaining({ messageKey: 'validation.msStore.unsupportedFieldMetadata' })],
+    });
+  });
+
+  it('rejects locale mismatches when a populated CSV language cannot be matched to exactly one entry', async () => {
+    const dataset = createMsStoreDataset();
+    dataset.entries = dataset.entries.slice(0, 1);
+
+    const csvPath = path.join(tmpDir, 'locale-mismatch.csv');
+    const validSourcePath = path.join(tmpDir, 'valid-source.csv');
+
+    await writeProductMsStoreData(dataset.productStorageId, dataset);
+    await exportProductMsStoreDataToFile(validSourcePath, createMsStoreDataset());
+    await fs.copyFile(validSourcePath, csvPath);
+
+    const result = await importProductMsStoreDataFromFile(dataset.productStorageId, csvPath);
+
+    expect(result).toMatchObject({
+      success: false,
+      filePath: csvPath,
+      errors: [expect.objectContaining({ messageKey: 'validation.msStore.importLocaleMissingEntry' })],
+    });
+  });
+
+  it('rejects export when more than one record maps to the same Microsoft CSV locale', async () => {
+    const dataset = createMsStoreDataset();
+    dataset.entries.push({
+      ...dataset.entries[0],
+      id: 'ms-3',
+      market: 'GB',
+      storeId: '9NTEST999',
+    });
+
+    const exportPath = path.join(tmpDir, 'ambiguous-export.csv');
+    const result = await exportProductMsStoreDataToFile(exportPath, dataset);
+
+    expect(result).toEqual({
+      success: false,
+      entryCount: 3,
+      error: 'validation.msStore.exportAmbiguousLocale',
     });
   });
 });
