@@ -1,5 +1,19 @@
 import { useDeferredValue, useState } from 'react';
-import { ArrowLeft, FileDown, FileUp, FileWarning, Plus, RotateCcw, Save, Search, Trash2 } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowLeft,
+  CheckCircle2,
+  FileDown,
+  FileUp,
+  FileWarning,
+  Languages,
+  LayoutList,
+  Plus,
+  RotateCcw,
+  Save,
+  Search,
+  Trash2,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/badge';
 import { Button } from '@/components/button';
@@ -55,7 +69,49 @@ interface ProductProfilePageProps {
   selectedProductId: string;
 }
 
+type InventoryFilter = 'all' | 'empty' | 'changed' | 'assets' | 'longText';
+type LocaleGroupStatus = 'ready' | 'needsReview' | 'new';
+
+interface LocaleGroup {
+  entries: MsStoreDataEntry[];
+  key: string;
+  latestUpdatedAt: string;
+  locale: string;
+  marketCount: number;
+  missingRequiredCount: number;
+  previewTitle: string;
+  status: LocaleGroupStatus;
+}
+
 const coreFieldIdSet = new Set(Object.values(msStoreCoreFieldIds));
+const requiredFieldIds = [
+  msStoreCoreFieldIds.title,
+  msStoreCoreFieldIds.shortDescription,
+  msStoreCoreFieldIds.description,
+] as const;
+
+function normalizeLocaleKey(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function normalizeMarketKey(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function sortLocaleValues(values: string[]): string[] {
+  return [...values].sort((left, right) => {
+    const leftIndex = supportedMsStoreLanguages.findIndex((language) => normalizeLocaleKey(language) === normalizeLocaleKey(left));
+    const rightIndex = supportedMsStoreLanguages.findIndex((language) => normalizeLocaleKey(language) === normalizeLocaleKey(right));
+
+    if (leftIndex !== -1 || rightIndex !== -1) {
+      if (leftIndex === -1) return 1;
+      if (rightIndex === -1) return -1;
+      return leftIndex - rightIndex;
+    }
+
+    return left.localeCompare(right);
+  });
+}
 
 function translateMaybe(t: ReturnType<typeof useTranslation>['t'], value: string): string {
   const translated = t(value);
@@ -70,56 +126,162 @@ function renderImportErrorLabel(t: ReturnType<typeof useTranslation>['t'], error
   return `${t('msStore.importErrorPrefix', { index: error.index + 1 })}: ${t(error.messageKey)}`;
 }
 
-function ValueEditor({
-  fieldDefinition,
-  label,
-  value,
-  onChange,
-}: {
-  fieldDefinition: MsStoreFieldDefinition;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const editorId = `${fieldDefinition.id}-${label.replace(/\s+/g, '-').toLowerCase()}`;
+function getEntryMissingRequiredCount(entry: MsStoreDataEntry): number {
+  let missingCount = entry.storeId.trim().length === 0 ? 1 : 0;
 
+  requiredFieldIds.forEach((fieldId) => {
+    if ((entry.fieldValues[fieldId] ?? '').trim().length === 0) {
+      missingCount += 1;
+    }
+  });
+
+  return missingCount;
+}
+
+function buildLocaleGroups(entries: MsStoreDataEntry[], untitledEntryLabel: string): LocaleGroup[] {
+  const groupedEntries = new Map<string, MsStoreDataEntry[]>();
+
+  entries.forEach((entry) => {
+    const key = normalizeLocaleKey(entry.locale);
+    const group = groupedEntries.get(key) ?? [];
+    group.push(entry);
+    groupedEntries.set(key, group);
+  });
+
+  return sortLocaleValues(Array.from(groupedEntries.values()).map((group) => group[0]?.locale ?? '')).map((locale) => {
+    const key = normalizeLocaleKey(locale);
+    const localeEntries = (groupedEntries.get(key) ?? []).slice().sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    const latestEntry = localeEntries[0] ?? null;
+    const previewTitle = localeEntries
+      .map((entry) => getMsStoreEntryCoreFieldValue(entry, 'title').trim())
+      .find((title) => title.length > 0) ?? untitledEntryLabel;
+    const missingRequiredCount = localeEntries.reduce((count, entry) => count + (getEntryMissingRequiredCount(entry) > 0 ? 1 : 0), 0);
+    const uniqueMarkets = new Set(localeEntries.map((entry) => entry.market.trim()).filter(Boolean));
+
+    return {
+      entries: localeEntries,
+      key,
+      latestUpdatedAt: latestEntry?.updatedAt ?? '-',
+      locale,
+      marketCount: uniqueMarkets.size,
+      missingRequiredCount,
+      previewTitle,
+      status: missingRequiredCount > 0 ? 'needsReview' : 'ready',
+    } satisfies LocaleGroup;
+  });
+}
+
+function createDraftLocaleGroup(locale: string, previewTitle: string): LocaleGroup {
+  return {
+    entries: [],
+    key: normalizeLocaleKey(locale),
+    latestUpdatedAt: '-',
+    locale,
+    marketCount: 0,
+    missingRequiredCount: 0,
+    previewTitle,
+    status: 'new',
+  };
+}
+
+function isAssetMsStoreField(fieldDefinition: MsStoreFieldDefinition): boolean {
+  return /screenshot|icon|logo|trailer|hero|image/i.test(fieldDefinition.field);
+}
+
+function getInventoryFieldState(
+  fieldDefinition: MsStoreFieldDefinition,
+  draft: MsStoreDataDraft | null,
+  defaultValues: Record<string, string>,
+): 'empty' | 'changed' | 'filled' {
+  const defaultValue = (defaultValues[fieldDefinition.id] ?? '').trim();
+  const localeValue = (draft?.fieldValues[fieldDefinition.id] ?? '').trim();
+
+  if (localeValue.length === 0) {
+    return 'empty';
+  }
+
+  if (localeValue !== defaultValue) {
+    return 'changed';
+  }
+
+  return 'filled';
+}
+
+function StatusBadge({ status, t }: { status: LocaleGroupStatus; t: ReturnType<typeof useTranslation>['t'] }) {
+  if (status === 'ready') {
+    return (
+      <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" variant="outline">
+        <CheckCircle2 className="size-3" />
+        {t('msStore.languageStatusReady')}
+      </Badge>
+    );
+  }
+
+  if (status === 'new') {
+    return (
+      <Badge className="border-primary/20 bg-primary/10 text-primary" variant="outline">
+        <Plus className="size-3" />
+        {t('msStore.languageStatusNew')}
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge className="border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300" variant="outline">
+      <AlertCircle className="size-3" />
+      {t('msStore.languageStatusNeedsReview')}
+    </Badge>
+  );
+}
+
+function FieldEditorControl({
+  ariaLabel,
+  fieldDefinition,
+  onChange,
+  placeholder,
+  value,
+}: {
+  ariaLabel: string;
+  fieldDefinition: MsStoreFieldDefinition;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  value: string;
+}) {
   if (isBooleanMsStoreField(fieldDefinition)) {
     return (
-      <label className="grid gap-2">
-        <span className="text-sm font-medium text-foreground">{label}</span>
-        <select
-          className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15"
-          id={editorId}
-          onChange={(event) => onChange(event.target.value)}
-          value={value}
-        >
-          <option value="">-</option>
-          <option value="True">True</option>
-          <option value="False">False</option>
-        </select>
-      </label>
+      <select
+        aria-label={ariaLabel}
+        className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground outline-none transition-colors focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15"
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      >
+        <option value="">-</option>
+        <option value="True">True</option>
+        <option value="False">False</option>
+      </select>
     );
   }
 
   if (isLongTextMsStoreField(fieldDefinition)) {
     return (
-      <label className="grid gap-2">
-        <span className="text-sm font-medium text-foreground">{label}</span>
-        <textarea
-          className="min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15"
-          id={editorId}
-          onChange={(event) => onChange(event.target.value)}
-          value={value}
-        />
-      </label>
+      <textarea
+        aria-label={ariaLabel}
+        className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15"
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        value={value}
+      />
     );
   }
 
   return (
-    <label className="grid gap-2">
-      <span className="text-sm font-medium text-foreground">{label}</span>
-      <Input id={editorId} onChange={(event) => onChange(event.target.value)} value={value} />
-    </label>
+    <Input
+      aria-label={ariaLabel}
+      className="h-8"
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      value={value}
+    />
   );
 }
 
@@ -156,7 +318,7 @@ export function ProductProfilePage({
 }: ProductProfilePageProps) {
   const { t } = useTranslation();
   const [fieldQuery, setFieldQuery] = useState('');
-  const [selectedInventoryFieldId, setSelectedInventoryFieldId] = useState('700');
+  const [inventoryFilter, setInventoryFilter] = useState<InventoryFilter>('all');
   const deferredFieldQuery = useDeferredValue(fieldQuery);
 
   if (!currentProduct || products.length === 0) {
@@ -181,25 +343,70 @@ export function ProductProfilePage({
     );
   }
 
+  const productOptions = products.map((product) => ({
+    value: product.id,
+    label: product.name || t('products.untitledProduct'),
+    description: product.folderName || t('sidebar.folderFallback'),
+  }));
+
+  const localeGroups = buildLocaleGroups(entries, t('msStore.untitledEntry'));
+  const draftLocale = draft?.locale.trim() ?? '';
+  const draftLocaleKey = normalizeLocaleKey(draftLocale);
+  const hasDraftLocaleGroup = draftLocaleKey.length > 0 && localeGroups.some((group) => group.key === draftLocaleKey);
+  const visibleLocaleGroups = hasDraftLocaleGroup || draftLocale.length === 0
+    ? localeGroups
+    : sortLocaleValues([...localeGroups.map((group) => group.locale), draftLocale]).map((locale) => (
+        localeGroups.find((group) => group.key === normalizeLocaleKey(locale))
+        ?? createDraftLocaleGroup(locale, t('msStore.untitledEntry'))
+      ));
+  const activeLocale = draftLocale || visibleLocaleGroups[0]?.locale || '';
+  const activeLocaleKey = normalizeLocaleKey(activeLocale);
+  const activeLocaleGroup = visibleLocaleGroups.find((group) => group.key === activeLocaleKey) ?? null;
+  const currentLocaleLabel = activeLocale ? getMsStoreLanguageLabel(activeLocale) : t('msStore.inventory.noLocaleSelected');
+  const localeEntries = activeLocaleGroup?.entries ?? [];
+  const localeRecordCount = localeEntries.length;
+  const activeEntry = localeEntries.find((entry) => entry.id === selectedEntryId)
+    ?? localeEntries.find((entry) => normalizeMarketKey(entry.market) === normalizeMarketKey(draft?.market ?? ''))
+    ?? localeEntries[0]
+    ?? null;
+  const knownMarkets = Array.from(new Set(entries.map((entry) => entry.market.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right));
+  const localeMarkets = Array.from(new Set(localeEntries.map((entry) => entry.market.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right));
+  const marketSuggestions = Array.from(new Set([...localeMarkets, ...knownMarkets]));
+  const requiredFilledCount = [
+    draft?.storeId.trim().length ? 'storeId' : null,
+    ...requiredFieldIds.map((fieldId) => ((draft?.fieldValues[fieldId] ?? '').trim().length > 0 ? fieldId : null)),
+  ].filter(Boolean).length;
+  const localeOnlyCount = Object.entries(draft?.fieldValues ?? {}).filter(([fieldId, value]) => value.trim().length > 0 && (defaultValues[fieldId] ?? '').trim().length === 0).length;
+  const changedCount = Object.entries(draft?.fieldValues ?? {}).filter(([fieldId, value]) => value.trim().length > 0 && value.trim() !== (defaultValues[fieldId] ?? '').trim()).length;
+
   const normalizedQuery = deferredFieldQuery.trim().toLowerCase();
   const inventoryFields = msStoreFieldRegistry.filter((fieldDefinition) => {
     if (coreFieldIdSet.has(fieldDefinition.id)) {
       return false;
     }
 
-    if (!normalizedQuery) {
-      return true;
+    if (normalizedQuery.length > 0 && ![fieldDefinition.field, fieldDefinition.id, fieldDefinition.type].some((value) => value.toLowerCase().includes(normalizedQuery))) {
+      return false;
     }
 
-    return [fieldDefinition.field, fieldDefinition.id, fieldDefinition.type]
-      .some((value) => value.toLowerCase().includes(normalizedQuery));
-  });
+    if (inventoryFilter === 'empty') {
+      return getInventoryFieldState(fieldDefinition, draft, defaultValues) === 'empty';
+    }
 
-  const productOptions = products.map((product) => ({
-    value: product.id,
-    label: product.name || t('products.untitledProduct'),
-    description: product.folderName || t('sidebar.folderFallback'),
-  }));
+    if (inventoryFilter === 'changed') {
+      return getInventoryFieldState(fieldDefinition, draft, defaultValues) === 'changed';
+    }
+
+    if (inventoryFilter === 'assets') {
+      return isAssetMsStoreField(fieldDefinition);
+    }
+
+    if (inventoryFilter === 'longText') {
+      return isLongTextMsStoreField(fieldDefinition);
+    }
+
+    return true;
+  });
 
   const statusBadge = loadStatus === 'loading'
     ? t('msStore.loading')
@@ -207,17 +414,60 @@ export function ProductProfilePage({
       ? t('msStore.loadFailed')
       : null;
 
-  const currentLocaleLabel = draft?.locale
-    ? getMsStoreLanguageLabel(draft.locale)
-    : t('msStore.inventory.noLocaleSelected');
+  const localeOptions = supportedMsStoreLanguages.map((locale) => ({
+    value: locale,
+    label: getMsStoreLanguageLabel(locale),
+  }));
 
-  const selectedInventoryField = inventoryFields.find((fieldDefinition) => fieldDefinition.id === selectedInventoryFieldId)
-    ?? inventoryFields[0]
-    ?? null;
+  const inventoryFilters: Array<{ id: InventoryFilter; label: string }> = [
+    { id: 'all', label: t('msStore.inventory.filters.all') },
+    { id: 'empty', label: t('msStore.inventory.filters.empty') },
+    { id: 'changed', label: t('msStore.inventory.filters.changed') },
+    { id: 'assets', label: t('msStore.inventory.filters.assets') },
+    { id: 'longText', label: t('msStore.inventory.filters.longText') },
+  ];
+
+  const handleSelectLocaleGroup = (locale: string) => {
+    const localeKey = normalizeLocaleKey(locale);
+    const group = visibleLocaleGroups.find((candidate) => candidate.key === localeKey);
+
+    if (!group || group.entries.length === 0) {
+      onAddEntry();
+      onDraftFieldChange('locale', locale);
+      return;
+    }
+
+    const preferredEntry = group.entries.find((entry) => normalizeMarketKey(entry.market) === normalizeMarketKey(draft?.market ?? '')) ?? group.entries[0];
+    onSelectEntry(preferredEntry.id);
+  };
+
+  const handleUseMarket = (market: string) => {
+    const normalizedLocale = activeLocale || draft?.locale || '';
+    const existingEntry = entries.find((entry) => (
+      normalizeLocaleKey(entry.locale) === normalizeLocaleKey(normalizedLocale)
+      && normalizeMarketKey(entry.market) === normalizeMarketKey(market)
+    ));
+
+    if (existingEntry) {
+      onSelectEntry(existingEntry.id);
+      return;
+    }
+
+    if (!selectedEntryId) {
+      onDraftFieldChange('market', market);
+      return;
+    }
+
+    onAddEntry();
+    if (normalizedLocale) {
+      onDraftFieldChange('locale', normalizedLocale);
+    }
+    onDraftFieldChange('market', market);
+  };
 
   return (
-    <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(28rem,1.05fr)]">
-      <Card className="min-h-0 overflow-hidden">
+    <div className="grid min-h-0 gap-4">
+      <Card className="overflow-hidden">
         <CardHeader className="border-b border-border/80 pb-3">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
             <div className="grid gap-3">
@@ -261,6 +511,7 @@ export function ProductProfilePage({
               {exportStatus === 'loading' ? <Badge variant="secondary">{t('msStore.exporting')}</Badge> : null}
               {exportStatus === 'succeeded' ? <Badge>{t('msStore.exportSuccess')}</Badge> : null}
               <Badge variant="secondary">{t('msStore.countLabel', { count: entries.length })}</Badge>
+              <Badge variant="secondary">{t('msStore.localeCountLabel', { count: visibleLocaleGroups.length })}</Badge>
             </div>
           </div>
         </CardHeader>
@@ -271,8 +522,8 @@ export function ProductProfilePage({
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 {t('msStore.activeContextLabel')}
               </p>
-              <p className="mt-1 text-lg font-semibold text-foreground">{currentProduct.name || t('products.untitledProduct')}</p>
-              <p className="mt-2 text-sm text-muted-foreground">{currentProduct.description || t('msStore.noDescription')}</p>
+              <p className="mt-1 text-base font-semibold text-foreground">{currentProduct.name || t('products.untitledProduct')}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{currentProduct.description || t('msStore.noDescription')}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               {currentProduct.relatedMarkets.map((market) => (
@@ -304,298 +555,416 @@ export function ProductProfilePage({
             </div>
           ) : null}
           {exportPath ? (
-            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800">
+            <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
               {t('msStore.exportPathLabel')}: <span className="font-mono text-xs">{exportPath}</span>
             </div>
           ) : null}
-
-          <div className="min-h-0 overflow-auto rounded-2xl border border-border/70">
-            <table className="w-full border-collapse text-sm">
-              <thead className="bg-[color:var(--surface-panel-muted)] text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3">{t('msStore.table.locale')}</th>
-                  <th className="px-4 py-3">{t('msStore.table.market')}</th>
-                  <th className="px-4 py-3">{t('msStore.table.title')}</th>
-                  <th className="px-4 py-3">{t('msStore.table.storeId')}</th>
-                  <th className="px-4 py-3 text-right">{t('msStore.table.updated')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.length > 0 ? entries.map((entry) => {
-                  const isSelected = entry.id === selectedEntryId;
-
-                  return (
-                    <tr
-                      aria-selected={isSelected}
-                      className={cn(
-                        'cursor-pointer border-t border-border/70 transition-colors hover:bg-accent/55',
-                        isSelected && 'bg-primary/10',
-                      )}
-                      key={entry.id}
-                      onClick={() => onSelectEntry(entry.id)}
-                    >
-                      <td className="px-4 py-3 font-medium text-foreground">{entry.locale ? getMsStoreLanguageLabel(entry.locale) : '-'}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{entry.market || '-'}</td>
-                      <td className="px-4 py-3 text-foreground">{getMsStoreEntryCoreFieldValue(entry, 'title') || t('msStore.untitledEntry')}</td>
-                      <td className="px-4 py-3 font-mono text-[13px] text-muted-foreground">{entry.storeId || '-'}</td>
-                      <td className="px-4 py-3 text-right font-mono text-[13px] text-muted-foreground">{entry.updatedAt}</td>
-                    </tr>
-                  );
-                }) : (
-                  <tr>
-                    <td className="px-4 py-10 text-center text-muted-foreground" colSpan={5}>
-                      {loadStatus === 'loading' ? t('msStore.loading') : t('msStore.noEntries')}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
         </CardContent>
       </Card>
 
-      <Card className="min-h-0 overflow-hidden">
-        <CardHeader className="border-b border-border/80 pb-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <CardTitle>{t('msStore.editorTitle')}</CardTitle>
-              <CardDescription>{t('msStore.editorDescription')}</CardDescription>
-            </div>
-            <Badge variant={selectedEntryId ? 'secondary' : 'default'}>
-              {selectedEntryId ? t('msStore.editingExisting') : t('msStore.creatingNew')}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="grid min-h-0 gap-4 overflow-auto pt-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="grid gap-2">
-              <span className="text-sm font-medium text-foreground">{t('msStore.form.localeLabel')}</span>
-              <Input
-                aria-label={t('msStore.form.localeLabel')}
-                aria-invalid={fieldErrors.locale ? 'true' : 'false'}
-                onChange={(event) => onDraftFieldChange('locale', event.target.value)}
-                placeholder={t('msStore.form.localePlaceholder')}
-                value={draft?.locale ?? ''}
-              />
-              <p className="text-xs text-muted-foreground">
-                {t('msStore.form.localeHint', { languages: supportedMsStoreLanguages.join(', ') })}
-              </p>
-              {fieldErrors.locale ? <span className="text-sm text-destructive">{t(fieldErrors.locale)}</span> : null}
-            </label>
-
-            <label className="grid gap-2">
-              <span className="text-sm font-medium text-foreground">{t('msStore.form.marketLabel')}</span>
-              <Input
-                aria-label={t('msStore.form.marketLabel')}
-                aria-invalid={fieldErrors.market ? 'true' : 'false'}
-                onChange={(event) => onDraftFieldChange('market', event.target.value)}
-                placeholder={t('msStore.form.marketPlaceholder')}
-                value={draft?.market ?? ''}
-              />
-              {fieldErrors.market ? <span className="text-sm text-destructive">{t(fieldErrors.market)}</span> : null}
-            </label>
-          </div>
-
-          <label className="grid gap-2">
-            <span className="text-sm font-medium text-foreground">{t('msStore.form.storeIdLabel')}</span>
-            <Input
-              aria-label={t('msStore.form.storeIdLabel')}
-              aria-invalid={fieldErrors.storeId ? 'true' : 'false'}
-              className="font-mono"
-              onChange={(event) => onDraftFieldChange('storeId', event.target.value)}
-              placeholder={t('msStore.form.storeIdPlaceholder')}
-              value={draft?.storeId ?? ''}
-            />
-            {fieldErrors.storeId ? <span className="text-sm text-destructive">{t(fieldErrors.storeId)}</span> : null}
-          </label>
-
-          <div className="rounded-2xl border border-border/70 bg-[color:var(--surface-panel-muted)] p-4">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(15rem,18rem)_minmax(0,1fr)_minmax(16rem,20rem)]">
+        <Card className="min-h-0 overflow-hidden">
+          <CardHeader className="border-b border-border/80 pb-3">
+            <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('msStore.coreFieldsLabel')}</p>
-                <p className="mt-1 text-sm text-muted-foreground">{t('msStore.coreFieldsDescription', { locale: currentLocaleLabel })}</p>
+                <CardTitle>{t('msStore.languagePanelTitle')}</CardTitle>
+                <CardDescription>{t('msStore.languagePanelDescription')}</CardDescription>
               </div>
-              <Badge variant="secondary">{currentLocaleLabel}</Badge>
+              <Badge variant="secondary">{visibleLocaleGroups.length}</Badge>
             </div>
-
-            <div className="grid gap-4">
-              {[
-                {
-                  error: fieldErrors.title,
-                  fieldId: msStoreCoreFieldIds.title,
-                  key: 'title' as const,
-                  label: t('msStore.form.titleLabel'),
-                },
-                {
-                  error: undefined,
-                  fieldId: msStoreCoreFieldIds.subtitle,
-                  key: 'subtitle' as const,
-                  label: t('msStore.form.subtitleLabel'),
-                },
-                {
-                  error: fieldErrors.shortDescription,
-                  fieldId: msStoreCoreFieldIds.shortDescription,
-                  key: 'shortDescription' as const,
-                  label: t('msStore.form.shortDescriptionLabel'),
-                },
-                {
-                  error: fieldErrors.description,
-                  fieldId: msStoreCoreFieldIds.description,
-                  key: 'description' as const,
-                  label: t('msStore.form.descriptionLabel'),
-                },
-              ].map((coreField) => {
-                const fieldDefinition = msStoreFieldRegistry.find((candidate) => candidate.id === coreField.fieldId);
-
-                if (!fieldDefinition) {
-                  return null;
-                }
+          </CardHeader>
+          <CardContent className="grid min-h-0 gap-4 overflow-auto pt-4">
+            <div className="grid gap-2">
+              {visibleLocaleGroups.length > 0 ? visibleLocaleGroups.map((group) => {
+                const isSelected = group.key === activeLocaleKey;
 
                 return (
-                  <div className="grid gap-3 rounded-xl border border-border/70 bg-background p-4" key={coreField.fieldId}>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-sm font-semibold text-foreground">{coreField.label}</h3>
-                      <Badge variant="outline">{fieldDefinition.field}</Badge>
-                      <Badge variant="outline">ID {fieldDefinition.id}</Badge>
+                  <button
+                    className={cn(
+                      'rounded-xl border px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/20',
+                      isSelected ? 'border-primary/35 bg-primary/8' : 'border-border/70 bg-background hover:bg-accent/55',
+                    )}
+                    key={group.key}
+                    onClick={() => handleSelectLocaleGroup(group.locale)}
+                    type="button"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground">{getMsStoreLanguageLabel(group.locale)}</p>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">{group.previewTitle}</p>
+                      </div>
+                      <StatusBadge status={group.status} t={t} />
                     </div>
-                    <div className="grid gap-3 lg:grid-cols-2">
-                      <ValueEditor
-                        fieldDefinition={fieldDefinition}
-                        label={`${coreField.label} (${t('msStore.defaultColumnLabel')})`}
-                        onChange={(value) => onDefaultFieldChange(coreField.fieldId, value)}
-                        value={defaultValues[coreField.fieldId] ?? ''}
-                      />
-                      <ValueEditor
-                        fieldDefinition={fieldDefinition}
-                        label={coreField.label}
-                        onChange={(value) => onDraftFieldChange(coreField.key, value)}
-                        value={draft?.[coreField.key] ?? ''}
-                      />
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                      <span>{t('msStore.localeRecordsLabel', { count: group.entries.length })}</span>
+                      <span>{t('msStore.localeMarketsLabel', { count: group.marketCount })}</span>
+                      <span className="font-mono">{group.latestUpdatedAt}</span>
                     </div>
-                    {coreField.error ? <span className="text-sm text-destructive">{t(coreField.error)}</span> : null}
-                  </div>
+                  </button>
                 );
-              })}
-            </div>
-          </div>
-
-          <label className="grid gap-2">
-            <span className="text-sm font-medium text-foreground">{t('msStore.form.keywordsLabel')}</span>
-            <Input
-              aria-label={t('msStore.form.keywordsLabel')}
-              aria-invalid={fieldErrors.keywords ? 'true' : 'false'}
-              onChange={(event) => onDraftFieldChange('keywordsText', event.target.value)}
-              placeholder={t('msStore.form.keywordsPlaceholder')}
-              value={draft?.keywordsText ?? ''}
-            />
-            <p className="text-xs text-muted-foreground">{t('msStore.form.keywordsHint')}</p>
-            {fieldErrors.keywords ? <span className="text-sm text-destructive">{t(fieldErrors.keywords)}</span> : null}
-          </label>
-
-          <div className="rounded-2xl border border-border/70 bg-[color:var(--surface-panel-muted)] p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('msStore.inventory.title')}</p>
-                <p className="mt-1 text-sm text-muted-foreground">{t('msStore.inventory.description', { locale: currentLocaleLabel })}</p>
-              </div>
-              <Badge variant="secondary">{t('msStore.inventory.countLabel', { count: inventoryFields.length })}</Badge>
-            </div>
-
-            <div className="mt-4 grid gap-3">
-              <label className="grid gap-2">
-                <span className="text-sm font-medium text-foreground">{t('msStore.inventory.searchLabel')}</span>
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    className="pl-10"
-                    onChange={(event) => setFieldQuery(event.target.value)}
-                    placeholder={t('msStore.inventory.searchPlaceholder')}
-                    value={fieldQuery}
-                  />
+              }) : (
+                <div className="rounded-xl border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
+                  {t('msStore.noEntries')}
                 </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-border/70 bg-[color:var(--surface-panel-muted)] px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('msStore.coverageTitle')}</p>
+              <div className="mt-3 grid gap-2 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">{t('msStore.coverageRequired')}</span>
+                  <span className="font-medium text-foreground">{requiredFilledCount} / 4</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">{t('msStore.coverageChanged')}</span>
+                  <span className="font-medium text-foreground">{changedCount}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">{t('msStore.coverageLocaleOnly')}</span>
+                  <span className="font-medium text-foreground">{localeOnlyCount}</span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="min-h-0 overflow-hidden">
+          <CardHeader className="border-b border-border/80 pb-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle>{t('msStore.editorTitle')}</CardTitle>
+                <CardDescription>{t('msStore.editorDescription', { locale: currentLocaleLabel })}</CardDescription>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={selectedEntryId ? 'secondary' : 'default'}>
+                  {selectedEntryId ? t('msStore.editingExisting') : t('msStore.creatingNew')}
+                </Badge>
+                {activeEntry ? <Badge variant="outline">{activeEntry.updatedAt}</Badge> : null}
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="grid min-h-0 gap-5 overflow-auto pt-4">
+            <section className="grid gap-4 rounded-xl border border-border/70 bg-[color:var(--surface-panel-muted)] p-4">
+              <div className="grid gap-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('msStore.overviewTitle')}</p>
+                <p className="text-sm text-muted-foreground">{t('msStore.overviewDescription')}</p>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,14rem)_minmax(0,13rem)_minmax(0,1fr)]">
+                <label className="grid gap-2">
+                  <span className="text-sm font-medium text-foreground">{t('msStore.form.localeLabel')}</span>
+                  <select
+                    aria-invalid={fieldErrors.locale ? 'true' : 'false'}
+                    aria-label={t('msStore.form.localeLabel')}
+                    className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15"
+                    onChange={(event) => onDraftFieldChange('locale', event.target.value)}
+                    value={draft?.locale ?? ''}
+                  >
+                    <option value="">{t('msStore.form.localePlaceholder')}</option>
+                    {localeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                  {fieldErrors.locale ? <span className="text-sm text-destructive">{t(fieldErrors.locale)}</span> : null}
+                </label>
+
+                <label className="grid gap-2">
+                  <span className="text-sm font-medium text-foreground">{t('msStore.form.marketLabel')}</span>
+                  <Input
+                    aria-invalid={fieldErrors.market ? 'true' : 'false'}
+                    aria-label={t('msStore.form.marketLabel')}
+                    list="msstore-market-options"
+                    onChange={(event) => onDraftFieldChange('market', event.target.value)}
+                    placeholder={t('msStore.form.marketPlaceholder')}
+                    value={draft?.market ?? ''}
+                  />
+                  {fieldErrors.market ? <span className="text-sm text-destructive">{t(fieldErrors.market)}</span> : null}
+                </label>
+
+                <label className="grid gap-2">
+                  <span className="text-sm font-medium text-foreground">{t('msStore.form.storeIdLabel')}</span>
+                  <Input
+                    aria-invalid={fieldErrors.storeId ? 'true' : 'false'}
+                    aria-label={t('msStore.form.storeIdLabel')}
+                    className="font-mono"
+                    onChange={(event) => onDraftFieldChange('storeId', event.target.value)}
+                    placeholder={t('msStore.form.storeIdPlaceholder')}
+                    value={draft?.storeId ?? ''}
+                  />
+                  {fieldErrors.storeId ? <span className="text-sm text-destructive">{t(fieldErrors.storeId)}</span> : null}
+                </label>
+              </div>
+
+              <datalist id="msstore-market-options">
+                {marketSuggestions.map((market) => (
+                  <option key={market} value={market} />
+                ))}
+              </datalist>
+
+              <div className="grid gap-2">
+                <span className="text-sm font-medium text-foreground">{t('msStore.marketRecordsTitle')}</span>
+                <div className="flex flex-wrap gap-2">
+                  {marketSuggestions.length > 0 ? marketSuggestions.map((market) => {
+                    const marketEntry = localeEntries.find((entry) => normalizeMarketKey(entry.market) === normalizeMarketKey(market));
+                    const isSelected = normalizeMarketKey(draft?.market ?? '') === normalizeMarketKey(market);
+
+                    return (
+                      <button
+                        aria-label={`${t('msStore.form.marketLabel')} ${market}`}
+                        className={cn(
+                          'inline-flex min-h-9 items-center gap-2 rounded-md border px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/20',
+                          isSelected ? 'border-primary/35 bg-primary/8 text-foreground' : 'border-border bg-background text-muted-foreground hover:bg-accent/55 hover:text-foreground',
+                        )}
+                        key={market}
+                        onClick={() => handleUseMarket(market)}
+                        type="button"
+                      >
+                        <span>{market}</span>
+                        <Badge variant="outline">{marketEntry ? t('msStore.marketRecordExisting') : t('msStore.marketRecordNew')}</Badge>
+                      </button>
+                    );
+                  }) : (
+                    <p className="text-sm text-muted-foreground">{t('msStore.marketRecordsEmpty')}</p>
+                  )}
+                </div>
+              </div>
+
+              <label className="grid gap-2">
+                <span className="text-sm font-medium text-foreground">{t('msStore.form.keywordsLabel')}</span>
+                <Input
+                  aria-invalid={fieldErrors.keywords ? 'true' : 'false'}
+                  aria-label={t('msStore.form.keywordsLabel')}
+                  onChange={(event) => onDraftFieldChange('keywordsText', event.target.value)}
+                  placeholder={t('msStore.form.keywordsPlaceholder')}
+                  value={draft?.keywordsText ?? ''}
+                />
+                <p className="text-xs text-muted-foreground">{t('msStore.form.keywordsHint')}</p>
+                {fieldErrors.keywords ? <span className="text-sm text-destructive">{t(fieldErrors.keywords)}</span> : null}
               </label>
+            </section>
 
-              <div className="grid gap-3">
-                {inventoryFields.length > 0 && selectedInventoryField ? (
-                  <div className="grid gap-3 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-                    <div className="max-h-[26rem] overflow-auto rounded-xl border border-border/70 bg-background p-2">
-                      <div className="grid gap-1">
-                        {inventoryFields.map((fieldDefinition) => {
-                          const isSelected = fieldDefinition.id === selectedInventoryField.id;
+            <section className="grid gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('msStore.coreFieldsLabel')}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{t('msStore.coreFieldsDescription', { locale: currentLocaleLabel })}</p>
+                </div>
+                <Badge variant="secondary">{currentLocaleLabel}</Badge>
+              </div>
 
-                          return (
-                            <button
-                              className={cn(
-                                'grid gap-1 rounded-lg px-3 py-2 text-left transition-colors hover:bg-accent/55',
-                                isSelected && 'bg-primary/10',
-                              )}
-                              key={fieldDefinition.id}
-                              onClick={() => setSelectedInventoryFieldId(fieldDefinition.id)}
-                              type="button"
-                            >
-                              <span className="text-sm font-medium text-foreground">{fieldDefinition.field}</span>
-                              <span className="text-xs text-muted-foreground">ID {fieldDefinition.id} · {fieldDefinition.type}</span>
-                            </button>
-                          );
-                        })}
+              <div className="overflow-hidden rounded-xl border border-border/70 bg-background">
+                <div className="grid grid-cols-[minmax(0,12rem)_minmax(0,1fr)_minmax(0,1fr)] gap-3 bg-[color:var(--surface-panel-muted)] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  <span>{t('msStore.inventory.columns.field')}</span>
+                  <span>{t('msStore.inventory.columns.default')}</span>
+                  <span>{t('msStore.inventory.columns.locale', { locale: currentLocaleLabel })}</span>
+                </div>
+
+                {[
+                  { error: fieldErrors.title, fieldId: msStoreCoreFieldIds.title, key: 'title' as const, label: t('msStore.form.titleLabel'), placeholder: t('msStore.form.titlePlaceholder') },
+                  { error: undefined, fieldId: msStoreCoreFieldIds.subtitle, key: 'subtitle' as const, label: t('msStore.form.subtitleLabel'), placeholder: t('msStore.form.subtitlePlaceholder') },
+                  { error: fieldErrors.shortDescription, fieldId: msStoreCoreFieldIds.shortDescription, key: 'shortDescription' as const, label: t('msStore.form.shortDescriptionLabel'), placeholder: t('msStore.form.shortDescriptionPlaceholder') },
+                  { error: fieldErrors.description, fieldId: msStoreCoreFieldIds.description, key: 'description' as const, label: t('msStore.form.descriptionLabel'), placeholder: t('msStore.form.descriptionPlaceholder') },
+                ].map((coreField) => {
+                  const fieldDefinition = msStoreFieldRegistry.find((candidate) => candidate.id === coreField.fieldId);
+
+                  if (!fieldDefinition) {
+                    return null;
+                  }
+
+                  return (
+                    <div className="border-t border-border/70 px-4 py-3" key={coreField.fieldId}>
+                      <div className="grid grid-cols-[minmax(0,12rem)_minmax(0,1fr)_minmax(0,1fr)] gap-3">
+                        <div className="grid gap-1">
+                          <p className="text-sm font-medium text-foreground">{coreField.label}</p>
+                          <p className="text-xs text-muted-foreground">{fieldDefinition.field} · ID {fieldDefinition.id}</p>
+                        </div>
+                        <FieldEditorControl
+                          ariaLabel={`${coreField.label} ${t('msStore.defaultColumnLabel')}`}
+                          fieldDefinition={fieldDefinition}
+                          onChange={(value) => onDefaultFieldChange(coreField.fieldId, value)}
+                          placeholder={coreField.placeholder}
+                          value={defaultValues[coreField.fieldId] ?? ''}
+                        />
+                        <FieldEditorControl
+                          ariaLabel={coreField.label}
+                          fieldDefinition={fieldDefinition}
+                          onChange={(value) => onDraftFieldChange(coreField.key, value)}
+                          placeholder={coreField.placeholder}
+                          value={draft?.[coreField.key] ?? ''}
+                        />
                       </div>
+                      {coreField.error ? <p className="mt-2 text-sm text-destructive">{t(coreField.error)}</p> : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="grid min-h-0 gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('msStore.inventory.title')}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{t('msStore.inventory.description', { locale: currentLocaleLabel })}</p>
+                </div>
+                <Badge variant="secondary">{t('msStore.inventory.countLabel', { count: inventoryFields.length })}</Badge>
+              </div>
+
+              <div className="min-h-0 overflow-hidden rounded-xl border border-border/70 bg-background">
+                <div className="grid gap-3 border-b border-border/70 bg-[color:var(--surface-panel-muted)] px-4 py-3">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      aria-label={t('msStore.inventory.searchLabel')}
+                      className="pl-10"
+                      onChange={(event) => setFieldQuery(event.target.value)}
+                      placeholder={t('msStore.inventory.searchPlaceholder')}
+                      value={fieldQuery}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {inventoryFilters.map((filter) => (
+                      <Button
+                        key={filter.id}
+                        onClick={() => setInventoryFilter(filter.id)}
+                        size="sm"
+                        type="button"
+                        variant={inventoryFilter === filter.id ? 'secondary' : 'outline'}
+                      >
+                        {filter.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                {inventoryFields.length > 0 ? (
+                  <div className="max-h-[34rem] overflow-auto">
+                    <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,14rem)_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b border-border/70 bg-background px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      <span>{t('msStore.inventory.columns.field')}</span>
+                      <span>{t('msStore.inventory.columns.default')}</span>
+                      <span>{t('msStore.inventory.columns.locale', { locale: currentLocaleLabel })}</span>
                     </div>
 
-                    <div className="grid gap-3 rounded-xl border border-border/70 bg-background p-4">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-sm font-semibold text-foreground">{selectedInventoryField.field}</h3>
-                        <Badge variant="outline">ID {selectedInventoryField.id}</Badge>
-                        <Badge variant="outline">{selectedInventoryField.type}</Badge>
-                      </div>
-                      <div className="grid gap-3 lg:grid-cols-2">
-                        <ValueEditor
-                          fieldDefinition={selectedInventoryField}
-                          label={`${selectedInventoryField.field} (${t('msStore.defaultColumnLabel')})`}
-                          onChange={(value) => onDefaultFieldChange(selectedInventoryField.id, value)}
-                          value={defaultValues[selectedInventoryField.id] ?? ''}
-                        />
-                        <ValueEditor
-                          fieldDefinition={selectedInventoryField}
-                          label={`${selectedInventoryField.field} (${currentLocaleLabel})`}
-                          onChange={(value) => onDraftInventoryFieldChange(selectedInventoryField.id, value)}
-                          value={draft?.fieldValues[selectedInventoryField.id] ?? ''}
-                        />
-                      </div>
-                    </div>
+                    {inventoryFields.map((fieldDefinition) => {
+                      const fieldState = getInventoryFieldState(fieldDefinition, draft, defaultValues);
+
+                      return (
+                        <div className="grid grid-cols-[minmax(0,14rem)_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b border-border/60 px-4 py-3" key={fieldDefinition.id}>
+                          <div className="grid gap-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-medium text-foreground">{fieldDefinition.field}</p>
+                              <Badge variant="outline">ID {fieldDefinition.id}</Badge>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              <span>{fieldDefinition.type}</span>
+                              <span>{t(`msStore.inventory.fieldState.${fieldState}`)}</span>
+                            </div>
+                          </div>
+                          <FieldEditorControl
+                            ariaLabel={`${fieldDefinition.field} ${t('msStore.defaultColumnLabel')}`}
+                            fieldDefinition={fieldDefinition}
+                            onChange={(value) => onDefaultFieldChange(fieldDefinition.id, value)}
+                            value={defaultValues[fieldDefinition.id] ?? ''}
+                          />
+                          <FieldEditorControl
+                            ariaLabel={`${fieldDefinition.field} ${currentLocaleLabel}`}
+                            fieldDefinition={fieldDefinition}
+                            onChange={(value) => onDraftInventoryFieldChange(fieldDefinition.id, value)}
+                            value={draft?.fieldValues[fieldDefinition.id] ?? ''}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
-                  <div className="rounded-xl border border-dashed border-border bg-background px-4 py-6 text-sm text-muted-foreground">
-                    {t('msStore.inventory.empty')}
-                  </div>
+                  <div className="px-4 py-8 text-sm text-muted-foreground">{t('msStore.inventory.empty')}</div>
                 )}
               </div>
-            </div>
-          </div>
+            </section>
 
-          <div className="flex flex-wrap justify-end gap-3 border-t border-border/70 pt-4">
-            <Button onClick={onDeleteEntry} type="button" variant="outline">
-              <Trash2 className="size-4" />
-              {t('msStore.deleteAction')}
-            </Button>
-            <Button onClick={onResetDraft} type="button" variant="outline">
-              <RotateCcw className="size-4" />
-              {t('msStore.resetAction')}
-            </Button>
-            <Button onClick={onSaveDraft} type="button">
-              <Save className="size-4" />
-              {t('msStore.saveAction')}
-            </Button>
-          </div>
-
-          <div className="rounded-xl border border-border/70 bg-[color:var(--surface-panel-muted)] px-4 py-3 text-xs text-muted-foreground">
-            <div className="flex items-center gap-2 text-foreground">
-              <FileWarning className="size-4" />
-              <span className="font-medium">{t('msStore.scopeNoticeTitle')}</span>
+            <div className="flex flex-wrap justify-end gap-3 border-t border-border/70 pt-4">
+              <Button onClick={onDeleteEntry} type="button" variant="outline">
+                <Trash2 className="size-4" />
+                {t('msStore.deleteAction')}
+              </Button>
+              <Button onClick={onResetDraft} type="button" variant="outline">
+                <RotateCcw className="size-4" />
+                {t('msStore.resetAction')}
+              </Button>
+              <Button onClick={onSaveDraft} type="button">
+                <Save className="size-4" />
+                {t('msStore.saveAction')}
+              </Button>
             </div>
-            <p className="mt-2">{t('msStore.scopeNoticeBody')}</p>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        <Card className="min-h-0 overflow-hidden">
+          <CardHeader className="border-b border-border/80 pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle>{t('msStore.toolsTitle')}</CardTitle>
+                <CardDescription>{t('msStore.toolsDescription')}</CardDescription>
+              </div>
+              <LayoutList className="size-4 text-muted-foreground" />
+            </div>
+          </CardHeader>
+          <CardContent className="grid min-h-0 gap-4 overflow-auto pt-4">
+            <div className="rounded-xl border border-border/70 bg-[color:var(--surface-panel-muted)] px-4 py-3">
+              <div className="flex items-center gap-2 text-foreground">
+                <Languages className="size-4" />
+                <span className="text-sm font-medium">{currentLocaleLabel}</span>
+              </div>
+              <div className="mt-3 grid gap-2 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">{t('msStore.localeRecordsStat')}</span>
+                  <span className="font-medium text-foreground">{localeRecordCount}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">{t('msStore.localeMarketsStat')}</span>
+                  <span className="font-medium text-foreground">{localeMarkets.length}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">{t('msStore.localeMarketActive')}</span>
+                  <span className="font-medium text-foreground">{draft?.market || '-'}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/70 bg-background px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('msStore.inventory.filtersLabel')}</p>
+              <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
+                {inventoryFilters.map((filter) => (
+                  <div className="flex items-center justify-between gap-3" key={filter.id}>
+                    <span className={cn(inventoryFilter === filter.id && 'text-foreground')}>{filter.label}</span>
+                    <span>{filter.id === inventoryFilter ? '●' : '○'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/70 bg-background px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('msStore.marketRecordsTitle')}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {localeMarkets.length > 0 ? localeMarkets.map((market) => (
+                  <Badge key={market} variant={normalizeMarketKey(draft?.market ?? '') === normalizeMarketKey(market) ? 'default' : 'secondary'}>
+                    {market}
+                  </Badge>
+                )) : <span className="text-sm text-muted-foreground">{t('msStore.marketRecordsEmpty')}</span>}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/70 bg-[color:var(--surface-panel-muted)] px-4 py-3 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2 text-foreground">
+                <FileWarning className="size-4" />
+                <span className="font-medium">{t('msStore.scopeNoticeTitle')}</span>
+              </div>
+              <p className="mt-2">{t('msStore.scopeNoticeBody')}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
