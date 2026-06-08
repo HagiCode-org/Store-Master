@@ -156,4 +156,57 @@ describe('Store Master app shell', () => {
     expect(screen.getByText('Keep Me')).toBeInTheDocument();
     expect(window.storeMaster.writeMsStoreData).toHaveBeenCalledTimes(1);
   });
+
+  it('saves a new locale record when existing locale rows are already loaded', async () => {
+    vi.mocked(window.storeMaster.readMsStoreData).mockResolvedValueOnce({
+      productStorageId: 'prd-11111111-1111-4111-8111-111111111111',
+      version: 2,
+      defaultValues: {},
+      entries: [
+        {
+          id: 'ms-existing',
+          productStorageId: 'prd-11111111-1111-4111-8111-111111111111',
+          locale: 'en-US',
+          market: 'US',
+          storeId: '9NEXIST123',
+          keywords: ['desk'],
+          fieldValues: {
+            '4': 'Existing Title',
+            '8': 'Existing summary',
+            '2': 'Existing description',
+          },
+          createdAt: '2026-06-08 10:00',
+          updatedAt: '2026-06-08 10:00',
+        },
+      ],
+    });
+
+    await renderApp();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Product Data' }));
+    await waitFor(() => {
+      expect(screen.queryByText('Loading MS Store data...')).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add language' }));
+    fireEvent.change(screen.getByLabelText('Locale'), { target: { value: 'ja-JP' } });
+    fireEvent.change(screen.getByLabelText('Market'), { target: { value: 'JP' } });
+    fireEvent.change(screen.getByLabelText('Store ID'), { target: { value: '9NNEW1234' } });
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Japan Title' } });
+    fireEvent.change(screen.getByLabelText('Short description'), { target: { value: 'Japan summary.' } });
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Japan description.' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save record' }));
+
+    await waitFor(() => {
+      expect(window.storeMaster.writeMsStoreData).toHaveBeenCalled();
+    });
+
+    expect(screen.queryByText('Locale is required.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Market is required.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Store ID is required.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Title is required.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Short description is required.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Description is required.')).not.toBeInTheDocument();
+  });
 });
