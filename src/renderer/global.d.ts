@@ -32,6 +32,12 @@ import type {
   UpdateRepoResult,
   UpdateRepoTopicsResult,
 } from '../shared/api';
+import type {
+  MsStoreDataDataset,
+  MsStoreDataExportResult,
+  MsStoreDataImportResult,
+} from '../shared/ms-store-data';
+import type { ProductRecord } from '../shared/products';
 
 interface HagihubApi {
   getAppInfo: () => Promise<AppInfo>;
@@ -65,6 +71,15 @@ interface HagihubApi {
   onNavigateToSection: (callback: (section: string) => void) => () => void;
 }
 
+interface StoreMasterApi {
+  readProducts: () => Promise<ProductRecord[]>;
+  writeProducts: (products: ProductRecord[]) => Promise<boolean>;
+  readMsStoreData: (productStorageId: string) => Promise<MsStoreDataDataset>;
+  writeMsStoreData: (productStorageId: string, dataset: MsStoreDataDataset) => Promise<boolean>;
+  importMsStoreData: (productStorageId: string) => Promise<MsStoreDataImportResult>;
+  exportMsStoreData: (productStorageId: string, dataset: MsStoreDataDataset) => Promise<MsStoreDataExportResult>;
+}
+
 declare global {
   interface WindowEventMap {
     'hagihub:device-flow-update': CustomEvent<DeviceFlowPollResult>;
@@ -75,6 +90,7 @@ declare global {
 
   interface Window {
     hagihub: HagihubApi;
+    storeMaster: StoreMasterApi;
   }
 }
 
