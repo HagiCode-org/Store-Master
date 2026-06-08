@@ -68,6 +68,7 @@ const resources = {
           folderPlaceholder: 'signal-desk',
           folderHint: '2-64 chars, starts with a lowercase letter, only lowercase letters, digits, and hyphens.',
           marketsLabel: 'Related markets',
+          defaultLanguageLabel: 'Default language',
         },
         saveProduct: 'Save product',
       },
@@ -108,7 +109,8 @@ const resources = {
         dismissStatus: 'Dismiss',
         scopeNoticeTitle: 'Product-scoped storage',
         scopeNoticeBody: 'All records on this page are isolated to the active product, persist under that product\'s stable storage folder, and round-trip through `win_store.csv` without dropping supported Partner Center fields.',
-        defaultColumnLabel: 'default column',
+        defaultColumnLabel: 'Default language column',
+        defaultLanguageBadge: 'Default language',
         coreFieldsLabel: 'Core CSV fields',
         coreFieldsDescription: 'These common listing rows stay prominent, but they now write to the full CSV workspace for {{locale}}.',
         languagePanelTitle: 'Languages',
@@ -121,7 +123,7 @@ const resources = {
         overviewDescription: 'Keep locale and keywords compact and visible while you edit.',
         coverageTitle: 'Coverage',
         coverageRequired: 'Required filled',
-        coverageChanged: 'Changed from default',
+        coverageChanged: 'Changed from default language',
         coverageLocaleOnly: 'Locale-only fields',
         localeRecordsStat: 'Locale records',
         toolsTitle: 'Field tools',
@@ -149,16 +151,25 @@ const resources = {
         },
         inventory: {
           title: 'Field inventory',
-          description: 'Search and edit every remaining Microsoft CSV row for {{locale}}, alongside the shared default column.',
+          description: 'Search and edit every remaining Microsoft CSV row for {{locale}}, now arranged into field families so each editing pass stays focused.',
           countLabel: '{{count}} fields',
+          groupCountLabel: '{{count}} groups',
           searchLabel: 'Find field',
           searchPlaceholder: 'Search by field name, field ID, or type',
           noLocaleSelected: 'No locale selected',
           empty: 'No CSV fields match the current search.',
           filtersLabel: 'Active filters',
+          groupByLabel: 'Browse by category',
+          groupAll: 'All groups',
+          groupAllDescription: 'Show every matching field, still grouped so large CSV inventories stay easier to scan.',
+          activeFilterLabel: 'Field filter',
+          activeGroupLabel: 'Active category',
+          activeQueryLabel: 'Search query',
+          matchCountLabel: 'Matching fields',
           columns: {
             field: 'Field',
             default: 'Default',
+            defaultLanguage: 'Default language · {{locale}}',
             locale: '{{locale}}',
           },
           filters: {
@@ -171,7 +182,65 @@ const resources = {
           fieldState: {
             empty: 'Empty',
             changed: 'Changed',
-            filled: 'Matches default',
+            filled: 'Matches default language',
+          },
+          groupState: {
+            changed: '{{count}} changed',
+            empty: '{{count}} empty',
+          },
+          groups: {
+            listingMetadata: {
+              label: 'Listing metadata',
+              description: 'Release notes, studio attribution, and alternate store-facing titles.',
+            },
+            legalAndPolicy: {
+              label: 'Legal and policy',
+              description: 'Copyright, trademark, and additional license text shown with the listing.',
+            },
+            storeArtwork: {
+              label: 'Logos and promo art',
+              description: 'Store logos, promotional images, hero art, and other non-screenshot visual assets.',
+            },
+            features: {
+              label: 'Feature highlights',
+              description: 'Short selling points and benefit bullets used across Store surfaces.',
+            },
+            requirements: {
+              label: 'Hardware requirements',
+              description: 'Minimum and recommended hardware guidance for the Store listing.',
+            },
+            searchAndDiscovery: {
+              label: 'Search and discovery',
+              description: 'Search terms and discovery aids that help the product appear in Store search.',
+            },
+            desktopScreenshots: {
+              label: 'Desktop screenshots',
+              description: 'Desktop screenshot assets and their localized captions.',
+            },
+            mobileScreenshots: {
+              label: 'Mobile screenshots',
+              description: 'Mobile screenshot assets and their localized captions.',
+            },
+            xboxScreenshots: {
+              label: 'Xbox screenshots',
+              description: 'Xbox screenshot assets and their localized captions.',
+            },
+            holographicScreenshots: {
+              label: 'Holographic screenshots',
+              description: 'Holographic or mixed-reality screenshot assets and captions.',
+            },
+            surfaceHubScreenshots: {
+              label: 'Surface Hub screenshots',
+              description: 'Surface Hub screenshot assets and captions.',
+            },
+            trailers: {
+              label: 'Trailers and video assets',
+              description: 'Trailer files, titles, thumbnails, captions, and audio-description assets.',
+            },
+            other: {
+              label: 'Other fields',
+              description: 'Supported CSV rows that do not fit the current field families.',
+            },
           },
         },
         table: {
@@ -247,6 +316,7 @@ const resources = {
         msStore: {
           localeRequired: 'Locale is required.',
           localeUnsupported: 'Locale must match one of the supported Store languages.',
+          defaultLanguageContentRequired: 'Create and save the default language content before editing other languages.',
           titleRequired: 'Title is required.',
           shortDescriptionRequired: 'Short description is required.',
           descriptionRequired: 'Description is required.',
@@ -330,6 +400,7 @@ const resources = {
           folderPlaceholder: 'signal-desk',
           folderHint: '长度 2-64 个字符，以小写字母开头，只允许小写字母、数字和连字符。',
           marketsLabel: '关联市场',
+          defaultLanguageLabel: '默认语言',
         },
         saveProduct: '保存产品',
       },
@@ -370,7 +441,8 @@ const resources = {
         dismissStatus: '关闭',
         scopeNoticeTitle: '产品级存储',
         scopeNoticeBody: '本页所有记录都只属于当前产品，并会写入该产品稳定存储目录下的专属文件，同时以 `win_store.csv` 形式完整往返，不丢失支持的 Partner Center 字段。',
-        defaultColumnLabel: 'default 列',
+        defaultColumnLabel: '默认语言列',
+        defaultLanguageBadge: '默认语言',
         coreFieldsLabel: '核心 CSV 字段',
         coreFieldsDescription: '常用上架字段继续保持高优先级展示，但现在会直接写入 {{locale}} 对应的完整 CSV 工作区。',
         languagePanelTitle: '语言列表',
@@ -383,7 +455,7 @@ const resources = {
         overviewDescription: '把语言和关键词压缩在同一块区域里维护。',
         coverageTitle: '覆盖情况',
         coverageRequired: '已填必填项',
-        coverageChanged: '相对 default 的改动',
+        coverageChanged: '相对默认语言的改动',
         coverageLocaleOnly: '仅语言列字段',
         localeRecordsStat: '语言记录数',
         toolsTitle: '字段工具',
@@ -411,16 +483,25 @@ const resources = {
         },
         inventory: {
           title: '字段清单',
-          description: '搜索并编辑 {{locale}} 下剩余的 Microsoft CSV 字段，同时维护共享的 default 列。',
+          description: '搜索并编辑 {{locale}} 下剩余的 Microsoft CSV 字段，现在会按字段家族分组展示，方便按主题逐段维护。',
           countLabel: '共 {{count}} 个字段',
+          groupCountLabel: '共 {{count}} 个分类',
           searchLabel: '查找字段',
           searchPlaceholder: '按字段名、字段 ID 或类型搜索',
           noLocaleSelected: '未选择语言',
           empty: '当前搜索条件下没有匹配的 CSV 字段。',
           filtersLabel: '当前筛选',
+          groupByLabel: '按分类浏览',
+          groupAll: '全部分类',
+          groupAllDescription: '显示所有命中的字段，但仍按分类分块，长列表也更容易扫描。',
+          activeFilterLabel: '字段筛选',
+          activeGroupLabel: '当前分类',
+          activeQueryLabel: '搜索词',
+          matchCountLabel: '匹配字段',
           columns: {
             field: '字段',
             default: 'default',
+            defaultLanguage: '默认语言 · {{locale}}',
             locale: '{{locale}}',
           },
           filters: {
@@ -433,7 +514,65 @@ const resources = {
           fieldState: {
             empty: '为空',
             changed: '已改动',
-            filled: '与 default 一致',
+            filled: '与默认语言一致',
+          },
+          groupState: {
+            changed: '{{count}} 个已改动',
+            empty: '{{count}} 个为空',
+          },
+          groups: {
+            listingMetadata: {
+              label: '上架元信息',
+              description: '用于维护发布说明、开发者归属以及商店展示时的替代标题。',
+            },
+            legalAndPolicy: {
+              label: '法务与政策',
+              description: '用于维护版权、商标以及附加许可条款等法务字段。',
+            },
+            storeArtwork: {
+              label: 'Logo 与宣传图',
+              description: '集中维护商店 Logo、推广图、主视觉和其他非截图类视觉资源。',
+            },
+            features: {
+              label: '卖点功能',
+              description: '用于维护商店列表中的功能亮点、卖点短句和价值摘要。',
+            },
+            requirements: {
+              label: '硬件要求',
+              description: '集中维护最低和推荐硬件需求说明。',
+            },
+            searchAndDiscovery: {
+              label: '搜索与发现',
+              description: '用于补充搜索词和提升商店内可发现性的字段。',
+            },
+            desktopScreenshots: {
+              label: '桌面截图',
+              description: '维护桌面端截图资源及其对应的本地化说明文案。',
+            },
+            mobileScreenshots: {
+              label: '移动端截图',
+              description: '维护移动端截图资源及其对应的本地化说明文案。',
+            },
+            xboxScreenshots: {
+              label: 'Xbox 截图',
+              description: '维护 Xbox 截图资源及其对应的本地化说明文案。',
+            },
+            holographicScreenshots: {
+              label: '全息截图',
+              description: '维护 Holographic 或混合现实场景的截图与说明。',
+            },
+            surfaceHubScreenshots: {
+              label: 'Surface Hub 截图',
+              description: '维护 Surface Hub 截图资源及其说明文案。',
+            },
+            trailers: {
+              label: '预告片与视频资源',
+              description: '集中维护预告片文件、标题、缩略图、字幕与音频描述等视频字段。',
+            },
+            other: {
+              label: '其它字段',
+              description: '收纳当前规则之外但仍受支持的 Microsoft CSV 字段。',
+            },
           },
         },
         table: {
@@ -509,6 +648,7 @@ const resources = {
         msStore: {
           localeRequired: '语言不能为空。',
           localeUnsupported: '语言必须匹配受支持的 Store 语言代码。',
+          defaultLanguageContentRequired: '请先创建并保存默认语言内容，再编辑其他语言。',
           titleRequired: '标题不能为空。',
           shortDescriptionRequired: '短描述不能为空。',
           descriptionRequired: '描述不能为空。',

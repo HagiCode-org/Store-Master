@@ -7,13 +7,14 @@ import type {
   MsStoreDataValidationErrors,
 } from '../../../shared/ms-store-data';
 import {
-  createEmptyMsStoreDataDataset,
   createEmptyMsStoreDataEntry,
   createTimestampLabel,
+  findMsStoreEntryByLocale,
   getMsStoreEntryCoreFieldValue,
   msStoreCoreFieldIds,
   normalizeKeywords,
   normalizeSupportedMsStoreLanguage,
+  type SupportedMsStoreLanguage,
   validateMsStoreDataEntry,
 } from '../../../shared/ms-store-data';
 
@@ -35,7 +36,7 @@ export interface MsStoreDataDraft {
 
 interface MsStoreDataState {
   activeProductStorageId: string;
-  defaultValues: Record<string, string>;
+  defaultLocale: SupportedMsStoreLanguage | '';
   entries: MsStoreDataEntry[];
   selectedEntryId: string;
   draft: MsStoreDataDraft | null;
@@ -62,15 +63,16 @@ function createDraftFromEntry(entry: MsStoreDataEntry): MsStoreDataDraft {
   };
 }
 
-function createDraftForProduct(productStorageId: string): MsStoreDataDraft {
-  return createDraftFromEntry(createEmptyMsStoreDataEntry(productStorageId));
+function createDraftForProduct(productStorageId: string, defaultLocale: SupportedMsStoreLanguage | ''): MsStoreDataDraft {
+  const draft = createDraftFromEntry(createEmptyMsStoreDataEntry(productStorageId));
+  draft.locale = defaultLocale;
+  return draft;
 }
 
 function createDatasetFromState(state: MsStoreDataState): MsStoreDataDataset {
   return {
     productStorageId: state.activeProductStorageId,
-    version: 2,
-    defaultValues: state.defaultValues,
+    version: 3,
     entries: state.entries,
   };
 }
@@ -105,7 +107,7 @@ function hydrateSelection(state: MsStoreDataState): void {
   }
 
   state.selectedEntryId = '';
-  state.draft = state.activeProductStorageId ? createDraftForProduct(state.activeProductStorageId) : null;
+  state.draft = state.activeProductStorageId ? createDraftForProduct(state.activeProductStorageId, state.defaultLocale) : null;
 }
 
 function syncCoreFieldValue(fieldValues: Record<string, string>, fieldId: string, value: string): Record<string, string> {
@@ -149,9 +151,13 @@ function clearStatuses(state: MsStoreDataState): void {
   state.exportPath = null;
 }
 
-export const loadMsStoreData = createAsyncThunk<MsStoreDataDataset, string, { rejectValue: string }>(
+export const loadMsStoreData = createAsyncThunk<
+  MsStoreDataDataset,
+  { productStorageId: string; defaultLocale: SupportedMsStoreLanguage },
+  { rejectValue: string }
+>(
   'msStoreData/loadMsStoreData',
-  async (productStorageId, { rejectWithValue }) => {
+  async ({ productStorageId }, { rejectWithValue }) => {
     try {
       return await window.storeMaster.readMsStoreData(productStorageId);
     } catch (error) {
@@ -166,13 +172,13 @@ export const loadMsStoreData = createAsyncThunk<MsStoreDataDataset, string, { re
 
 export const importMsStoreData = createAsyncThunk<
   Awaited<ReturnType<typeof window.storeMaster.importMsStoreData>>,
-  string,
+  { productStorageId: string; defaultLocale: SupportedMsStoreLanguage },
   { rejectValue: string }
 >(
   'msStoreData/importMsStoreData',
-  async (productStorageId, { rejectWithValue }) => {
+  async ({ productStorageId, defaultLocale }, { rejectWithValue }) => {
     try {
-      return await window.storeMaster.importMsStoreData(productStorageId);
+      return await window.storeMaster.importMsStoreData(productStorageId, defaultLocale);
     } catch (error) {
       return rejectWithValue(
         error instanceof Error && error.message.trim().length > 0
@@ -185,13 +191,13 @@ export const importMsStoreData = createAsyncThunk<
 
 export const exportMsStoreData = createAsyncThunk<
   Awaited<ReturnType<typeof window.storeMaster.exportMsStoreData>>,
-  { productStorageId: string; dataset: MsStoreDataDataset },
+  { productStorageId: string; defaultLocale: SupportedMsStoreLanguage; dataset: MsStoreDataDataset },
   { rejectValue: string }
 >(
   'msStoreData/exportMsStoreData',
-  async ({ productStorageId, dataset }, { rejectWithValue }) => {
+  async ({ productStorageId, defaultLocale, dataset }, { rejectWithValue }) => {
     try {
-      return await window.storeMaster.exportMsStoreData(productStorageId, dataset);
+      return await window.storeMaster.exportMsStoreData(productStorageId, defaultLocale, dataset);
     } catch (error) {
       return rejectWithValue(
         error instanceof Error && error.message.trim().length > 0
@@ -204,7 +210,7 @@ export const exportMsStoreData = createAsyncThunk<
 
 const initialState: MsStoreDataState = {
   activeProductStorageId: '',
-  defaultValues: {},
+  defaultLocale: '',
   entries: [],
   selectedEntryId: '',
   draft: null,
@@ -225,7 +231,7 @@ const msStoreDataSlice = createSlice({
   reducers: {
     clearMsStoreWorkspace(state) {
       state.activeProductStorageId = '';
-      state.defaultValues = {};
+      state.defaultLocale = '';
       state.entries = [];
       state.selectedEntryId = '';
       state.draft = null;
@@ -251,8 +257,17 @@ const msStoreDataSlice = createSlice({
       }
 
       state.selectedEntryId = '';
-      state.draft = createDraftForProduct(state.activeProductStorageId);
+      state.draft = createDraftForProduct(state.activeProductStorageId, state.defaultLocale);
       state.fieldErrors = {};
+    },
+    setMsStoreDefaultLocale(state, action: PayloadAction<SupportedMsStoreLanguage>) {
+      state.defaultLocale = action.payload;
+
+      if (state.draft && !state.selectedEntryId && state.entries.length === 0) {
+        state.draft.locale = action.payload;
+      }
+
+      clearStatuses(state);
     },
     replaceMsStoreDraft(state, action: PayloadAction<MsStoreDataDraft>) {
       state.draft = {
@@ -329,18 +344,6 @@ const msStoreDataSlice = createSlice({
 
       clearStatuses(state);
     },
-    updateMsStoreDefaultFieldValue(
-      state,
-      action: PayloadAction<{ fieldId: string; value: string }>,
-    ) {
-      if (action.payload.value.length === 0) {
-        delete state.defaultValues[action.payload.fieldId];
-      } else {
-        state.defaultValues[action.payload.fieldId] = action.payload.value;
-      }
-
-      clearStatuses(state);
-    },
     resetMsStoreDraft(state) {
       hydrateSelection(state);
       state.fieldErrors = {};
@@ -352,9 +355,18 @@ const msStoreDataSlice = createSlice({
 
       const normalizedEntry = normalizeDraft(state.draft);
       const fieldErrors = validateMsStoreDataEntry(normalizedEntry);
+      const hasDefaultLocaleEntry = state.defaultLocale
+        ? Boolean(findMsStoreEntryByLocale(state.entries, state.defaultLocale))
+        : false;
+      const isSavingDefaultLocale = state.defaultLocale.length > 0
+        && (normalizeSupportedMsStoreLanguage(normalizedEntry.locale) ?? normalizedEntry.locale.trim()) === state.defaultLocale;
 
       if (hasDuplicateLocale(state.entries, normalizedEntry)) {
         fieldErrors.locale = 'validation.msStore.duplicateLocale';
+      }
+
+      if (state.defaultLocale && !isSavingDefaultLocale && !hasDefaultLocaleEntry) {
+        fieldErrors.locale = 'validation.msStore.defaultLanguageContentRequired';
       }
 
       state.fieldErrors = fieldErrors;
@@ -381,6 +393,15 @@ const msStoreDataSlice = createSlice({
         return;
       }
 
+      const targetEntry = findEntry(state.entries, entryId);
+      if (
+        targetEntry
+        && state.defaultLocale
+        && (normalizeSupportedMsStoreLanguage(targetEntry.locale) ?? targetEntry.locale.trim()) === state.defaultLocale
+      ) {
+        return;
+      }
+
       state.entries = state.entries.filter((entry) => entry.id !== entryId);
       state.fieldErrors = {};
       clearStatuses(state);
@@ -393,18 +414,17 @@ const msStoreDataSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(loadMsStoreData.pending, (state, action) => {
-        state.activeProductStorageId = action.meta.arg;
-        state.defaultValues = {};
+        state.activeProductStorageId = action.meta.arg.productStorageId;
+        state.defaultLocale = action.meta.arg.defaultLocale;
         state.loadStatus = 'loading';
         state.loadError = null;
         state.entries = [];
         state.selectedEntryId = '';
-        state.draft = createDraftForProduct(action.meta.arg);
+        state.draft = createDraftForProduct(action.meta.arg.productStorageId, action.meta.arg.defaultLocale);
         state.fieldErrors = {};
       })
       .addCase(loadMsStoreData.fulfilled, (state, action) => {
         state.activeProductStorageId = action.payload.productStorageId;
-        state.defaultValues = action.payload.defaultValues;
         state.entries = action.payload.entries;
         state.loadStatus = 'succeeded';
         state.loadError = null;
@@ -413,10 +433,9 @@ const msStoreDataSlice = createSlice({
         hydrateSelection(state);
       })
       .addCase(loadMsStoreData.rejected, (state, action) => {
-        state.defaultValues = {};
         state.entries = [];
         state.selectedEntryId = '';
-        state.draft = state.activeProductStorageId ? createDraftForProduct(state.activeProductStorageId) : null;
+        state.draft = state.activeProductStorageId ? createDraftForProduct(state.activeProductStorageId, state.defaultLocale) : null;
         state.loadStatus = 'failed';
         state.loadError = action.payload ?? i18n.t('msStore.loadFailed');
       })
@@ -428,7 +447,6 @@ const msStoreDataSlice = createSlice({
       .addCase(importMsStoreData.fulfilled, (state, action) => {
         if (action.payload.success) {
           state.activeProductStorageId = action.payload.dataset.productStorageId;
-          state.defaultValues = action.payload.dataset.defaultValues;
           state.entries = action.payload.dataset.entries;
           state.selectedEntryId = '';
           state.fieldErrors = {};
@@ -481,8 +499,8 @@ export const {
   replaceMsStoreDraft,
   saveMsStoreDraft,
   selectMsStoreEntry,
+  setMsStoreDefaultLocale,
   startNewMsStoreEntry,
-  updateMsStoreDefaultFieldValue,
   updateMsStoreDraftField,
   updateMsStoreDraftInventoryField,
 } = msStoreDataSlice.actions;

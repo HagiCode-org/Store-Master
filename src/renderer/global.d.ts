@@ -36,6 +36,7 @@ import type {
   MsStoreDataDataset,
   MsStoreDataExportResult,
   MsStoreDataImportResult,
+  SupportedMsStoreLanguage,
 } from '../shared/ms-store-data';
 import type { ProductRecord } from '../shared/products';
 
@@ -76,8 +77,8 @@ interface StoreMasterApi {
   writeProducts: (products: ProductRecord[]) => Promise<boolean>;
   readMsStoreData: (productStorageId: string) => Promise<MsStoreDataDataset>;
   writeMsStoreData: (productStorageId: string, dataset: MsStoreDataDataset) => Promise<boolean>;
-  importMsStoreData: (productStorageId: string) => Promise<MsStoreDataImportResult>;
-  exportMsStoreData: (productStorageId: string, dataset: MsStoreDataDataset) => Promise<MsStoreDataExportResult>;
+  importMsStoreData: (productStorageId: string, defaultLocale: SupportedMsStoreLanguage) => Promise<MsStoreDataImportResult>;
+  exportMsStoreData: (productStorageId: string, defaultLocale: SupportedMsStoreLanguage, dataset: MsStoreDataDataset) => Promise<MsStoreDataExportResult>;
 }
 
 declare global {

@@ -7,6 +7,8 @@ import { LanguagesPage } from '@/components/products/LanguagesPage';
 import { ProductProfilePage } from '@/components/products/ProductProfilePage';
 import { ProductsPage } from '@/components/products/ProductsPage';
 import { SettingsPage } from '@/components/settings/SettingsPage';
+import { normalizeSupportedMsStoreLanguage } from '../shared/ms-store-data';
+import { cloneProductRelatedMarkets, getEnabledProductMarkets } from '../shared/products';
 import {
   changeAppLanguage,
   getLanguageShortLabel,
@@ -24,11 +26,11 @@ import {
   saveMsStoreDraft,
   selectMsStoreEntry,
   startNewMsStoreEntry,
-  updateMsStoreDefaultFieldValue,
   updateMsStoreDraftField,
   updateMsStoreDraftInventoryField,
 } from '@/store/slices/msStoreDataSlice';
 import {
+  updateDraftMarketDefaultLanguage,
   createProduct,
   resetDraft,
   saveDraft,
@@ -58,7 +60,6 @@ export default function App() {
   const loadStatus = useAppSelector((state) => state.productManagement.loadStatus);
   const supportedMarkets = useAppSelector((state) => state.productManagement.supportedMarkets);
   const msStoreDraft = useAppSelector((state) => state.msStoreData.draft);
-  const msStoreDefaultValues = useAppSelector((state) => state.msStoreData.defaultValues);
   const msStoreEntries = useAppSelector((state) => state.msStoreData.entries);
   const msStoreFieldErrors = useAppSelector((state) => state.msStoreData.fieldErrors);
   const msStoreLoadStatus = useAppSelector((state) => state.msStoreData.loadStatus);
@@ -93,16 +94,23 @@ export default function App() {
       return true;
     }
 
-    return [product.name, product.folderName, product.description, product.relatedMarkets.join(' ')]
+    return [
+      product.name,
+      product.folderName,
+      product.description,
+      getEnabledProductMarkets(product.relatedMarkets)
+        .map((market) => `${market} ${product.relatedMarkets[market === 'Steam' ? 'steam' : 'msStore'].defaultLanguage}`)
+        .join(' '),
+    ]
       .some((field) => field.toLowerCase().includes(keyword));
-  });
+  }, [deferredSearchValue, products]);
 
   const selectedProduct = products.find((product) => product.id === selectedProductId) ?? null;
   const currentProduct = selectedProduct
     ? {
         ...selectedProduct,
         ...draft,
-        relatedMarkets: [...draft.relatedMarkets],
+        relatedMarkets: cloneProductRelatedMarkets(draft.relatedMarkets),
       }
     : null;
 
@@ -136,6 +144,15 @@ export default function App() {
       loadStatus={loadStatus}
       onAddProduct={handleAddProduct}
       onDraftFieldChange={(field, value) => dispatch(updateDraftField({ field, value }))}
+      onDraftMarketDefaultLanguageChange={(market, value) => {
+        const normalizedLanguage = normalizeSupportedMsStoreLanguage(value);
+
+        if (!normalizedLanguage) {
+          return;
+        }
+
+        dispatch(updateDraftMarketDefaultLanguage({ market, value: normalizedLanguage }));
+      }}
       onResetDraft={() => dispatch(resetDraft())}
       onSaveDraft={() => dispatch(saveDraft())}
       onSelectProduct={(productId) => dispatch(selectProduct(productId))}
@@ -150,7 +167,6 @@ export default function App() {
     content = (
       <ProductProfilePage
         currentProduct={currentProduct}
-        defaultValues={msStoreDefaultValues}
         draft={msStoreDraft}
         entries={msStoreEntries}
         exportError={msStoreExportError}
@@ -163,7 +179,6 @@ export default function App() {
         loadError={msStoreLoadError}
         loadStatus={msStoreLoadStatus}
         onClearMessages={() => dispatch(clearMsStoreMessages())}
-        onDefaultFieldChange={(fieldId, value) => dispatch(updateMsStoreDefaultFieldValue({ fieldId, value }))}
         onDraftFieldChange={(field, value) => dispatch(updateMsStoreDraftField({ field, value }))}
         onDraftInventoryFieldChange={(fieldId, value) => dispatch(updateMsStoreDraftInventoryField({ fieldId, value }))}
         onExport={() => {
@@ -173,10 +188,10 @@ export default function App() {
 
           void dispatch(exportMsStoreData({
             productStorageId: currentProduct.productStorageId,
+            defaultLocale: currentProduct.relatedMarkets.msStore.defaultLanguage,
             dataset: {
               productStorageId: currentProduct.productStorageId,
-              version: 2,
-              defaultValues: msStoreDefaultValues,
+              version: 3,
               entries: msStoreEntries,
             },
           }));
@@ -186,7 +201,10 @@ export default function App() {
             return;
           }
 
-          void dispatch(importMsStoreData(currentProduct.productStorageId));
+          void dispatch(importMsStoreData({
+            productStorageId: currentProduct.productStorageId,
+            defaultLocale: currentProduct.relatedMarkets.msStore.defaultLanguage,
+          }));
         }}
         onOpenProducts={() => dispatch(setActiveSection('products'))}
         onResetDraft={() => dispatch(resetMsStoreDraft())}

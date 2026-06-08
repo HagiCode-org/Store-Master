@@ -19,16 +19,17 @@ import { Button } from '@/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/card';
 import { Input } from '@/components/input';
 import { SearchableSelect } from '@/components/searchable-select';
+import { groupMsStoreInventoryFields, type MsStoreInventoryGroupId } from '@/lib/msStoreFieldGroups';
 import {
   buildLocaleGroups,
   createDraftLocaleGroup,
-  getEntryMissingRequiredCount,
   normalizeLocaleKey,
   sortLocaleValues,
   type LocaleGroupStatus,
 } from '@/lib/msStoreLanguages';
 import { cn } from '@/lib/utils';
 import {
+  findMsStoreEntryByLocale,
   type MsStoreDataImportError,
   type MsStoreDataValidationErrors,
   getMsStoreLanguageLabel,
@@ -40,12 +41,15 @@ import {
   type MsStoreDataEntry,
   type MsStoreFieldDefinition,
 } from '../../../shared/ms-store-data';
+import {
+  getEnabledProductMarkets,
+  getProductMarketSettings,
+} from '../../../shared/products';
 import type { MsStoreDataDraft } from '@/store/slices/msStoreDataSlice';
 import type { ProductRecord } from '@/store/slices/productManagementSlice';
 
 interface ProductProfilePageProps {
   currentProduct: ProductRecord | null;
-  defaultValues: Record<string, string>;
   draft: MsStoreDataDraft | null;
   entries: MsStoreDataEntry[];
   exportError: string | null;
@@ -58,7 +62,6 @@ interface ProductProfilePageProps {
   loadError: string | null;
   loadStatus: 'idle' | 'loading' | 'succeeded' | 'failed';
   onClearMessages: () => void;
-  onDefaultFieldChange: (fieldId: string, value: string) => void;
   onDraftFieldChange: (field: EditableDraftFieldKey, value: string) => void;
   onDraftInventoryFieldChange: (fieldId: string, value: string) => void;
   onExport: () => void;
@@ -73,8 +76,16 @@ interface ProductProfilePageProps {
 }
 
 type InventoryFilter = 'all' | 'empty' | 'changed' | 'assets' | 'longText';
+type InventoryGroupFilter = 'all' | MsStoreInventoryGroupId;
 type CoreDraftFieldKey = 'title' | 'subtitle' | 'shortDescription' | 'description';
 type EditableDraftFieldKey = keyof Pick<MsStoreDataDraft, 'locale' | 'title' | 'subtitle' | 'shortDescription' | 'description' | 'keywordsText'>;
+
+interface InventoryFieldGroupSummary {
+  id: MsStoreInventoryGroupId;
+  changedCount: number;
+  emptyCount: number;
+  fields: MsStoreFieldDefinition[];
+}
 
 const coreFieldIdSet = new Set(Object.values(msStoreCoreFieldIds));
 const requiredFieldIds = [
@@ -104,9 +115,9 @@ function isAssetMsStoreField(fieldDefinition: MsStoreFieldDefinition): boolean {
 function getInventoryFieldState(
   fieldDefinition: MsStoreFieldDefinition,
   draft: MsStoreDataDraft | null,
-  defaultValues: Record<string, string>,
+  baselineFieldValues: Record<string, string>,
 ): 'empty' | 'changed' | 'filled' {
-  const defaultValue = (defaultValues[fieldDefinition.id] ?? '').trim();
+  const defaultValue = (baselineFieldValues[fieldDefinition.id] ?? '').trim();
   const localeValue = (draft?.fieldValues[fieldDefinition.id] ?? '').trim();
 
   if (localeValue.length === 0) {
@@ -149,12 +160,14 @@ function StatusBadge({ status, t }: { status: LocaleGroupStatus; t: ReturnType<t
 
 function FieldEditorControl({
   ariaLabel,
+  disabled = false,
   fieldDefinition,
   onChange,
   placeholder,
   value,
 }: {
   ariaLabel: string;
+  disabled?: boolean;
   fieldDefinition: MsStoreFieldDefinition;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -165,6 +178,7 @@ function FieldEditorControl({
       <select
         aria-label={ariaLabel}
         className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground outline-none transition-colors focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15"
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         value={value}
       >
@@ -180,6 +194,7 @@ function FieldEditorControl({
       <textarea
         aria-label={ariaLabel}
         className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15"
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         value={value}
@@ -191,6 +206,7 @@ function FieldEditorControl({
     <Input
       aria-label={ariaLabel}
       className="h-8"
+      disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
       value={value}
@@ -199,27 +215,23 @@ function FieldEditorControl({
 }
 
 interface CoreFieldRowProps {
-  defaultValue: string;
+  baselineValue: string;
   error?: string;
   fieldDefinition: MsStoreFieldDefinition;
-  fieldId: string;
   fieldKey: CoreDraftFieldKey;
   label: string;
   localeValue: string;
-  onDefaultFieldChange: (fieldId: string, value: string) => void;
   onDraftFieldChange: (field: CoreDraftFieldKey, value: string) => void;
   placeholder: string;
 }
 
 function CoreFieldRow({
-  defaultValue,
+  baselineValue,
   error,
   fieldDefinition,
-  fieldId,
   fieldKey,
   label,
   localeValue,
-  onDefaultFieldChange,
   onDraftFieldChange,
   placeholder,
 }: CoreFieldRowProps) {
@@ -231,11 +243,12 @@ function CoreFieldRow({
           <p className="text-xs text-muted-foreground">{fieldDefinition.field} · ID {fieldDefinition.id}</p>
         </div>
         <FieldEditorControl
-          ariaLabel={`${label} default`}
+          ariaLabel={`${label} baseline`}
+          disabled
           fieldDefinition={fieldDefinition}
-          onChange={(value) => onDefaultFieldChange(fieldId, value)}
+          onChange={() => {}}
           placeholder={placeholder}
-          value={defaultValue}
+          value={baselineValue}
         />
         <FieldEditorControl
           ariaLabel={label}
@@ -251,22 +264,20 @@ function CoreFieldRow({
 }
 
 interface InventoryFieldRowProps {
-  defaultValue: string;
+  baselineValue: string;
   fieldDefinition: MsStoreFieldDefinition;
   fieldStateLabel: string;
   localeLabel: string;
   localeValue: string;
-  onDefaultFieldChange: (fieldId: string, value: string) => void;
   onDraftInventoryFieldChange: (fieldId: string, value: string) => void;
 }
 
 const InventoryFieldRow = memo(function InventoryFieldRow({
-  defaultValue,
+  baselineValue,
   fieldDefinition,
   fieldStateLabel,
   localeLabel,
   localeValue,
-  onDefaultFieldChange,
   onDraftInventoryFieldChange,
 }: InventoryFieldRowProps) {
   return (
@@ -282,10 +293,11 @@ const InventoryFieldRow = memo(function InventoryFieldRow({
         </div>
       </div>
       <FieldEditorControl
-        ariaLabel={`${fieldDefinition.field} default`}
+        ariaLabel={`${fieldDefinition.field} baseline`}
+        disabled
         fieldDefinition={fieldDefinition}
-        onChange={(value) => onDefaultFieldChange(fieldDefinition.id, value)}
-        value={defaultValue}
+        onChange={() => {}}
+        value={baselineValue}
       />
       <FieldEditorControl
         ariaLabel={`${fieldDefinition.field} ${localeLabel}`}
@@ -296,7 +308,7 @@ const InventoryFieldRow = memo(function InventoryFieldRow({
     </div>
   );
 }, (prev, next) => (
-  prev.defaultValue === next.defaultValue
+  prev.baselineValue === next.baselineValue
   && prev.fieldDefinition.id === next.fieldDefinition.id
   && prev.fieldStateLabel === next.fieldStateLabel
   && prev.localeLabel === next.localeLabel
@@ -305,7 +317,6 @@ const InventoryFieldRow = memo(function InventoryFieldRow({
 
 export function ProductProfilePage({
   currentProduct,
-  defaultValues,
   draft,
   entries,
   exportError,
@@ -318,7 +329,6 @@ export function ProductProfilePage({
   loadError,
   loadStatus,
   onClearMessages,
-  onDefaultFieldChange,
   onDraftFieldChange,
   onDraftInventoryFieldChange,
   onExport,
@@ -334,6 +344,7 @@ export function ProductProfilePage({
   const { t } = useTranslation();
   const [fieldQuery, setFieldQuery] = useState('');
   const [inventoryFilter, setInventoryFilter] = useState<InventoryFilter>('all');
+  const [inventoryGroupFilter, setInventoryGroupFilter] = useState<InventoryGroupFilter>('all');
   const deferredFieldQuery = useDeferredValue(fieldQuery);
 
   const productOptions = useMemo(() => products.map((product) => ({
@@ -346,6 +357,14 @@ export function ProductProfilePage({
   const activeSelectedEntryId = draft && persistedEntryIds.has(draft.id) ? draft.id : '';
   const localeGroups = useMemo(() => buildLocaleGroups(entries, t('msStore.untitledEntry')), [entries, t]);
   const draftLocale = draft?.locale.trim() ?? '';
+  const defaultLocale = currentProduct?.relatedMarkets.msStore.defaultLanguage ?? '';
+  const draftIsDefaultLocale = defaultLocale.length > 0 && draftLocale === defaultLocale;
+  const defaultEntry = draftIsDefaultLocale
+    ? {
+        fieldValues: draft?.fieldValues ?? {},
+      }
+    : (defaultLocale ? findMsStoreEntryByLocale(entries, defaultLocale) : null);
+  const defaultFieldValues = defaultEntry?.fieldValues ?? {};
   const draftLocaleKey = normalizeLocaleKey(draftLocale);
   const hasDraftLocaleGroup = draftLocaleKey.length > 0 && localeGroups.some((group) => group.key === draftLocaleKey);
   const visibleLocaleGroups = useMemo(() => (hasDraftLocaleGroup || draftLocale.length === 0
@@ -358,6 +377,7 @@ export function ProductProfilePage({
   const activeLocaleKey = normalizeLocaleKey(activeLocale);
   const activeLocaleGroup = visibleLocaleGroups.find((group) => group.key === activeLocaleKey) ?? null;
   const currentLocaleLabel = activeLocale ? getMsStoreLanguageLabel(activeLocale) : t('msStore.inventory.noLocaleSelected');
+  const defaultLocaleLabel = defaultLocale ? getMsStoreLanguageLabel(defaultLocale) : t('msStore.inventory.noLocaleSelected');
   const localeEntries = activeLocaleGroup?.entries ?? [];
   const localeRecordCount = localeEntries.length;
   const activeEntry = localeEntries.find((entry) => entry.id === activeSelectedEntryId)
@@ -366,8 +386,8 @@ export function ProductProfilePage({
   const requiredFilledCount = requiredFieldIds
     .map((fieldId) => ((draft?.fieldValues[fieldId] ?? '').trim().length > 0 ? fieldId : null))
     .filter(Boolean).length;
-  const localeOnlyCount = Object.entries(draft?.fieldValues ?? {}).filter(([fieldId, value]) => value.trim().length > 0 && (defaultValues[fieldId] ?? '').trim().length === 0).length;
-  const changedCount = Object.entries(draft?.fieldValues ?? {}).filter(([fieldId, value]) => value.trim().length > 0 && value.trim() !== (defaultValues[fieldId] ?? '').trim()).length;
+  const localeOnlyCount = Object.entries(draft?.fieldValues ?? {}).filter(([fieldId, value]) => value.trim().length > 0 && (defaultFieldValues[fieldId] ?? '').trim().length === 0).length;
+  const changedCount = Object.entries(draft?.fieldValues ?? {}).filter(([fieldId, value]) => value.trim().length > 0 && value.trim() !== (defaultFieldValues[fieldId] ?? '').trim()).length;
 
   const normalizedQuery = deferredFieldQuery.trim().toLowerCase();
   const inventoryFields = useMemo(() => msStoreFieldRegistry.filter((fieldDefinition) => {
@@ -380,11 +400,11 @@ export function ProductProfilePage({
     }
 
     if (inventoryFilter === 'empty') {
-      return getInventoryFieldState(fieldDefinition, draft, defaultValues) === 'empty';
+      return getInventoryFieldState(fieldDefinition, draft, defaultFieldValues) === 'empty';
     }
 
     if (inventoryFilter === 'changed') {
-      return getInventoryFieldState(fieldDefinition, draft, defaultValues) === 'changed';
+      return getInventoryFieldState(fieldDefinition, draft, defaultFieldValues) === 'changed';
     }
 
     if (inventoryFilter === 'assets') {
@@ -396,7 +416,34 @@ export function ProductProfilePage({
     }
 
     return true;
-  }), [defaultValues, draft, inventoryFilter, normalizedQuery]);
+  }), [defaultFieldValues, draft, inventoryFilter, normalizedQuery]);
+  const inventoryFieldGroups = useMemo<InventoryFieldGroupSummary[]>(() => groupMsStoreInventoryFields(inventoryFields).map((group) => {
+    const summary = group.fields.reduce((counts, fieldDefinition) => {
+      const fieldState = getInventoryFieldState(fieldDefinition, draft, defaultFieldValues);
+      counts[fieldState] += 1;
+      return counts;
+    }, {
+      empty: 0,
+      changed: 0,
+      filled: 0,
+    });
+
+    return {
+      id: group.id,
+      changedCount: summary.changed,
+      emptyCount: summary.empty,
+      fields: group.fields,
+    };
+  }), [defaultFieldValues, draft, inventoryFields]);
+  const activeInventoryGroupFilter = inventoryGroupFilter === 'all' || inventoryFieldGroups.some((group) => group.id === inventoryGroupFilter)
+    ? inventoryGroupFilter
+    : 'all';
+  const visibleInventoryGroups = activeInventoryGroupFilter === 'all'
+    ? inventoryFieldGroups
+    : inventoryFieldGroups.filter((group) => group.id === activeInventoryGroupFilter);
+  const selectedInventoryGroup = activeInventoryGroupFilter === 'all'
+    ? null
+    : inventoryFieldGroups.find((group) => group.id === activeInventoryGroupFilter) ?? null;
 
   const statusBadge = loadStatus === 'loading'
     ? t('msStore.loading')
@@ -416,6 +463,18 @@ export function ProductProfilePage({
     { id: 'assets', label: t('msStore.inventory.filters.assets') },
     { id: 'longText', label: t('msStore.inventory.filters.longText') },
   ];
+  const inventoryGroupOptions = useMemo(() => [
+    {
+      id: 'all' as const,
+      label: t('msStore.inventory.groupAll'),
+      totalCount: inventoryFields.length,
+    },
+    ...inventoryFieldGroups.map((group) => ({
+      id: group.id,
+      label: t(`msStore.inventory.groups.${group.id}.label`),
+      totalCount: group.fields.length,
+    })),
+  ], [inventoryFieldGroups, inventoryFields.length, t]);
 
   const handleSelectLocaleGroup = (locale: string) => {
     const localeKey = normalizeLocaleKey(locale);
@@ -508,11 +567,23 @@ export function ProductProfilePage({
               <p className="mt-1 text-sm text-muted-foreground">{currentProduct.description || t('msStore.noDescription')}</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {currentProduct.relatedMarkets.map((market) => (
-                <Badge key={market} variant="secondary">{market}</Badge>
-              ))}
+              {getEnabledProductMarkets(currentProduct.relatedMarkets).map((market) => {
+                const settings = getProductMarketSettings(currentProduct.relatedMarkets, market);
+
+                return (
+                  <Badge key={market} variant="secondary">
+                    {market} · {getMsStoreLanguageLabel(settings.defaultLanguage)}
+                  </Badge>
+                );
+              })}
             </div>
           </div>
+
+          {!defaultEntry ? (
+            <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+              {t('validation.msStore.defaultLanguageContentRequired')}
+            </div>
+          ) : null}
 
           {loadError ? <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{translateMaybe(t, loadError)}</div> : null}
           {importError ? (
@@ -678,7 +749,7 @@ export function ProductProfilePage({
               <div className="overflow-hidden rounded-xl border border-border/70 bg-background">
                 <div className="grid grid-cols-[minmax(0,12rem)_minmax(0,1fr)_minmax(0,1fr)] gap-3 bg-[color:var(--surface-panel-muted)] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                   <span>{t('msStore.inventory.columns.field')}</span>
-                  <span>{t('msStore.inventory.columns.default')}</span>
+                  <span>{t('msStore.inventory.columns.defaultLanguage', { locale: defaultLocaleLabel })}</span>
                   <span>{t('msStore.inventory.columns.locale', { locale: currentLocaleLabel })}</span>
                 </div>
 
@@ -696,15 +767,13 @@ export function ProductProfilePage({
 
                   return (
                     <CoreFieldRow
-                      defaultValue={defaultValues[coreField.fieldId] ?? ''}
+                      baselineValue={defaultFieldValues[coreField.fieldId] ?? ''}
                       error={coreField.error ? t(coreField.error) : undefined}
                       fieldDefinition={fieldDefinition}
-                      fieldId={coreField.fieldId}
                       fieldKey={coreField.key}
                       key={coreField.fieldId}
                       label={coreField.label}
                       localeValue={draft?.[coreField.key] ?? ''}
-                      onDefaultFieldChange={onDefaultFieldChange}
                       onDraftFieldChange={onDraftFieldChange}
                       placeholder={coreField.placeholder}
                     />
@@ -719,11 +788,14 @@ export function ProductProfilePage({
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('msStore.inventory.title')}</p>
                   <p className="mt-1 text-sm text-muted-foreground">{t('msStore.inventory.description', { locale: currentLocaleLabel })}</p>
                 </div>
-                <Badge variant="secondary">{t('msStore.inventory.countLabel', { count: inventoryFields.length })}</Badge>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary">{t('msStore.inventory.countLabel', { count: inventoryFields.length })}</Badge>
+                  <Badge variant="secondary">{t('msStore.inventory.groupCountLabel', { count: inventoryFieldGroups.length })}</Badge>
+                </div>
               </div>
 
-              <div className="min-h-0 overflow-hidden rounded-xl border border-border/70 bg-background">
-                <div className="grid gap-3 border-b border-border/70 bg-[color:var(--surface-panel-muted)] px-4 py-3">
+              <div className="grid gap-3 rounded-xl border border-border/70 bg-background p-4">
+                <div className="grid gap-3 rounded-xl border border-border/70 bg-[color:var(--surface-panel-muted)] px-4 py-3">
                   <div className="relative">
                     <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
@@ -747,35 +819,85 @@ export function ProductProfilePage({
                       </Button>
                     ))}
                   </div>
+                  <div className="grid gap-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('msStore.inventory.groupByLabel')}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {inventoryGroupOptions.map((groupOption) => {
+                        const isSelected = groupOption.id === activeInventoryGroupFilter;
+
+                        return (
+                          <Button
+                            className="gap-2"
+                            key={groupOption.id}
+                            onClick={() => setInventoryGroupFilter(groupOption.id)}
+                            size="sm"
+                            type="button"
+                            variant={isSelected ? 'secondary' : 'outline'}
+                          >
+                            <span>{groupOption.label}</span>
+                            <span className="rounded-full bg-background/90 px-1.5 py-0.5 text-[11px] leading-none text-muted-foreground">
+                              {groupOption.totalCount}
+                            </span>
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedInventoryGroup
+                        ? t(`msStore.inventory.groups.${selectedInventoryGroup.id}.description`)
+                        : t('msStore.inventory.groupAllDescription')}
+                    </p>
+                  </div>
                 </div>
 
-                {inventoryFields.length > 0 ? (
-                  <div className="max-h-[34rem] overflow-auto">
-                    <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,14rem)_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b border-border/70 bg-background px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                      <span>{t('msStore.inventory.columns.field')}</span>
-                      <span>{t('msStore.inventory.columns.default')}</span>
-                      <span>{t('msStore.inventory.columns.locale', { locale: currentLocaleLabel })}</span>
-                    </div>
+                {visibleInventoryGroups.length > 0 ? (
+                  <div className="grid max-h-[34rem] gap-4 overflow-auto pr-1">
+                    {visibleInventoryGroups.map((group) => (
+                      <div className="overflow-hidden rounded-xl border border-border/70 bg-background" key={group.id}>
+                        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/70 bg-[color:var(--surface-panel-muted)] px-4 py-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground">{t(`msStore.inventory.groups.${group.id}.label`)}</p>
+                            <p className="mt-1 text-sm text-muted-foreground">{t(`msStore.inventory.groups.${group.id}.description`)}</p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="secondary">{t('msStore.inventory.countLabel', { count: group.fields.length })}</Badge>
+                            {group.changedCount > 0 ? (
+                              <Badge variant="outline">{t('msStore.inventory.groupState.changed', { count: group.changedCount })}</Badge>
+                            ) : null}
+                            {group.emptyCount > 0 ? (
+                              <Badge variant="outline">{t('msStore.inventory.groupState.empty', { count: group.emptyCount })}</Badge>
+                            ) : null}
+                          </div>
+                        </div>
 
-                    {inventoryFields.map((fieldDefinition) => {
-                      const fieldState = getInventoryFieldState(fieldDefinition, draft, defaultValues);
+                        <div className="grid grid-cols-[minmax(0,14rem)_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b border-border/70 bg-background px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                          <span>{t('msStore.inventory.columns.field')}</span>
+                          <span>{t('msStore.inventory.columns.defaultLanguage', { locale: defaultLocaleLabel })}</span>
+                          <span>{t('msStore.inventory.columns.locale', { locale: currentLocaleLabel })}</span>
+                        </div>
 
-                      return (
-                        <InventoryFieldRow
-                          defaultValue={defaultValues[fieldDefinition.id] ?? ''}
-                          fieldDefinition={fieldDefinition}
-                          fieldStateLabel={t(`msStore.inventory.fieldState.${fieldState}`)}
-                          key={fieldDefinition.id}
-                          localeLabel={currentLocaleLabel}
-                          localeValue={draft?.fieldValues[fieldDefinition.id] ?? ''}
-                          onDefaultFieldChange={onDefaultFieldChange}
-                          onDraftInventoryFieldChange={onDraftInventoryFieldChange}
-                        />
-                      );
-                    })}
+                        {group.fields.map((fieldDefinition) => {
+                          const fieldState = getInventoryFieldState(fieldDefinition, draft, defaultFieldValues);
+
+                          return (
+                            <InventoryFieldRow
+                              baselineValue={defaultFieldValues[fieldDefinition.id] ?? ''}
+                              fieldDefinition={fieldDefinition}
+                              fieldStateLabel={t(`msStore.inventory.fieldState.${fieldState}`)}
+                              key={fieldDefinition.id}
+                              localeLabel={currentLocaleLabel}
+                              localeValue={draft?.fieldValues[fieldDefinition.id] ?? ''}
+                              onDraftInventoryFieldChange={onDraftInventoryFieldChange}
+                            />
+                          );
+                        })}
+                      </div>
+                    ))}
                   </div>
                 ) : (
-                  <div className="px-4 py-8 text-sm text-muted-foreground">{t('msStore.inventory.empty')}</div>
+                  <div className="rounded-xl border border-dashed border-border bg-[color:var(--surface-panel-muted)] px-4 py-8 text-sm text-muted-foreground">
+                    {t('msStore.inventory.empty')}
+                  </div>
                 )}
               </div>
             </section>
@@ -826,12 +948,28 @@ export function ProductProfilePage({
             <div className="rounded-xl border border-border/70 bg-background px-4 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('msStore.inventory.filtersLabel')}</p>
               <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
-                {inventoryFilters.map((filter) => (
-                  <div className="flex items-center justify-between gap-3" key={filter.id}>
-                    <span className={cn(inventoryFilter === filter.id && 'text-foreground')}>{filter.label}</span>
-                    <span>{filter.id === inventoryFilter ? '●' : '○'}</span>
+                <div className="flex items-center justify-between gap-3">
+                  <span>{t('msStore.inventory.activeFilterLabel')}</span>
+                  <span className="font-medium text-foreground">{inventoryFilters.find((filter) => filter.id === inventoryFilter)?.label}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>{t('msStore.inventory.activeGroupLabel')}</span>
+                  <span className="font-medium text-foreground">
+                    {selectedInventoryGroup
+                      ? t(`msStore.inventory.groups.${selectedInventoryGroup.id}.label`)
+                      : t('msStore.inventory.groupAll')}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>{t('msStore.inventory.matchCountLabel')}</span>
+                  <span className="font-medium text-foreground">{inventoryFields.length}</span>
+                </div>
+                {fieldQuery.trim().length > 0 ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <span>{t('msStore.inventory.activeQueryLabel')}</span>
+                    <span className="max-w-[10rem] truncate font-mono text-xs text-foreground">{fieldQuery.trim()}</span>
                   </div>
-                ))}
+                ) : null}
               </div>
             </div>
 

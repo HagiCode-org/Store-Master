@@ -295,11 +295,7 @@ describe('product-scoped storage helpers', () => {
 
     return {
       productStorageId,
-      version: 2,
-      defaultValues: {
-        [msStoreCoreFieldIds.title]: 'Signal Desk',
-        '603': 'False',
-      },
+      version: 3,
       entries: [
         {
           id: 'ms-1',
@@ -311,6 +307,7 @@ describe('product-scoped storage helpers', () => {
             [msStoreCoreFieldIds.subtitle]: 'Operator-ready',
             [msStoreCoreFieldIds.shortDescription]: 'Localized Store summary.',
             [msStoreCoreFieldIds.description]: 'Line 1\nLine 2, with comma',
+            '603': 'False',
             '700': 'Feature callout',
           },
           createdAt: '2026-06-08 09:00',
@@ -338,8 +335,7 @@ describe('product-scoped storage helpers', () => {
 
     return {
       productStorageId: dataset.productStorageId,
-      version: 2,
-      defaultValues: {},
+      version: 3,
       entries: dataset.entries.map((entry) => ({
         ...entry,
         fieldValues: {},
@@ -391,8 +387,7 @@ describe('product-scoped storage helpers', () => {
 
     expect(result).toEqual({
       productStorageId,
-      version: 2,
-      defaultValues: {},
+      version: 3,
       entries: [expect.objectContaining({
         locale: 'en-US',
         fieldValues: {
@@ -411,14 +406,14 @@ describe('product-scoped storage helpers', () => {
 
     await writeProductMsStoreData(dataset.productStorageId, dataset);
 
-    const exportResult = await exportProductMsStoreDataToFile(exportPath, dataset);
+    const exportResult = await exportProductMsStoreDataToFile(exportPath, dataset, 'en-US');
     const rawExport = await fs.readFile(exportPath, 'utf8');
 
     expect(rawExport.startsWith(`\uFEFF${msStoreCsvHeader.join(',')}\r\n`)).toBe(true);
     expect(rawExport.includes('\r\n')).toBe(true);
     expect(rawExport).toContain('"Line 1\nLine 2, with comma"');
 
-    const importResult = await importProductMsStoreDataFromFile(dataset.productStorageId, exportPath);
+    const importResult = await importProductMsStoreDataFromFile(dataset.productStorageId, exportPath, 'en-US');
 
     expect(exportResult).toEqual({
       success: true,
@@ -430,8 +425,7 @@ describe('product-scoped storage helpers', () => {
       filePath: exportPath,
       dataset: {
         productStorageId: dataset.productStorageId,
-        version: 2,
-        defaultValues: dataset.defaultValues,
+        version: 3,
         entries: [
           expect.objectContaining({
             locale: 'en-US',
@@ -462,7 +456,7 @@ describe('product-scoped storage helpers', () => {
     await writeProductMsStoreData(dataset.productStorageId, dataset);
     await fs.writeFile(importPath, `\uFEFFWrong,ID,Type (Type),default,en-us,zh-cn,zh-hant,ja-jp,ko-kr,de-de,fr-fr,es-es,pt-br,ru-ru\r\n`);
 
-    const result = await importProductMsStoreDataFromFile(dataset.productStorageId, importPath);
+    const result = await importProductMsStoreDataFromFile(dataset.productStorageId, importPath, 'en-US');
     const reloadedDataset = await readProductMsStoreData(dataset.productStorageId);
 
     expect(result).toMatchObject({
@@ -479,12 +473,12 @@ describe('product-scoped storage helpers', () => {
     const validSourcePath = path.join(tmpDir, 'valid-field-metadata-source.csv');
 
     await writeProductMsStoreData(dataset.productStorageId, dataset);
-    await exportProductMsStoreDataToFile(validSourcePath, dataset);
+    await exportProductMsStoreDataToFile(validSourcePath, dataset, 'en-US');
 
     const rawCsv = await fs.readFile(validSourcePath, 'utf8');
     await fs.writeFile(importPath, rawCsv.replace('Description,2,Text', 'DescriptionX,2,Text'));
 
-    const result = await importProductMsStoreDataFromFile(dataset.productStorageId, importPath);
+    const result = await importProductMsStoreDataFromFile(dataset.productStorageId, importPath, 'en-US');
 
     expect(result).toMatchObject({
       success: false,
@@ -493,7 +487,7 @@ describe('product-scoped storage helpers', () => {
     });
   });
 
-  it('rejects locale mismatches when a populated CSV language cannot be matched to exactly one entry', async () => {
+  it('creates missing locale entries when importing a populated CSV language for the first time', async () => {
     const dataset = createMsStoreDataset();
     dataset.entries = dataset.entries.slice(0, 1);
 
@@ -501,16 +495,42 @@ describe('product-scoped storage helpers', () => {
     const validSourcePath = path.join(tmpDir, 'valid-source.csv');
 
     await writeProductMsStoreData(dataset.productStorageId, dataset);
-    await exportProductMsStoreDataToFile(validSourcePath, createMsStoreDataset());
+    await exportProductMsStoreDataToFile(validSourcePath, createMsStoreDataset(), 'en-US');
     await fs.copyFile(validSourcePath, csvPath);
 
-    const result = await importProductMsStoreDataFromFile(dataset.productStorageId, csvPath);
+    const result = await importProductMsStoreDataFromFile(dataset.productStorageId, csvPath, 'en-US');
 
-    expect(result).toMatchObject({
-      success: false,
-      filePath: csvPath,
-      errors: [expect.objectContaining({ messageKey: 'validation.msStore.importLocaleMissingEntry' })],
-    });
+    expect(result.success).toBe(true);
+    if (!result.success) {
+      throw new Error('expected successful import');
+    }
+
+    expect(result.filePath).toBe(csvPath);
+    expect(result.dataset.entries).toHaveLength(2);
+    expect(result.dataset.entries.map((entry) => entry.locale)).toEqual(['en-US', 'zh-CN']);
+    expect(result.dataset.entries[1].fieldValues[msStoreCoreFieldIds.title]).toBe('信号桌面');
+  });
+
+  it('creates locale entries from a blank workspace during CSV import', async () => {
+    const dataset = createBlankMsStoreDataset();
+    dataset.entries = [];
+
+    const csvPath = path.join(tmpDir, 'blank-workspace-import.csv');
+    const validSourcePath = path.join(tmpDir, 'valid-source.csv');
+
+    await writeProductMsStoreData(dataset.productStorageId, dataset);
+    await exportProductMsStoreDataToFile(validSourcePath, createMsStoreDataset(), 'en-US');
+    await fs.copyFile(validSourcePath, csvPath);
+
+    const result = await importProductMsStoreDataFromFile(dataset.productStorageId, csvPath, 'en-US');
+
+    expect(result.success).toBe(true);
+    if (!result.success) {
+      throw new Error('expected successful import');
+    }
+
+    expect(result.dataset.entries.map((entry) => entry.locale)).toEqual(['en-US', 'zh-CN']);
+    expect(result.dataset.entries[0].fieldValues[msStoreCoreFieldIds.title]).toBe('Signal Desk Deluxe');
   });
 
   it('rejects export when more than one record maps to the same Microsoft CSV locale', async () => {
@@ -521,7 +541,7 @@ describe('product-scoped storage helpers', () => {
     });
 
     const exportPath = path.join(tmpDir, 'ambiguous-export.csv');
-    const result = await exportProductMsStoreDataToFile(exportPath, dataset);
+    const result = await exportProductMsStoreDataToFile(exportPath, dataset, 'en-US');
 
     expect(result).toEqual({
       success: false,
@@ -543,7 +563,16 @@ describe('product storage id backfill', () => {
         name: 'Legacy Desk',
         description: 'Legacy product without a storage id.',
         folderName: 'legacy-desk',
-        relatedMarkets: ['Steam'],
+        relatedMarkets: {
+          steam: {
+            enabled: true,
+            defaultLanguage: 'en-US',
+          },
+          msStore: {
+            enabled: false,
+            defaultLanguage: 'en-US',
+          },
+        },
         updatedAt: '2026-06-08 08:00',
       }],
     }));

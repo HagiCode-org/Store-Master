@@ -5,12 +5,13 @@ import { Badge } from '@/components/badge';
 import { Button } from '@/components/button';
 import { cn } from '@/lib/utils';
 import type { NavigationSection } from '@/store/slices/navigationSlice';
-import type { SupportedMarket } from '@/store/slices/productManagementSlice';
+import { getMsStoreLanguageLabel } from '../../../shared/ms-store-data';
+import { getEnabledProductMarkets, getProductMarketSettings, type ProductRelatedMarkets } from '../../../shared/products';
 
 interface SidebarProductSummary {
   folderName: string;
   name: string;
-  relatedMarkets: SupportedMarket[];
+  relatedMarkets: ProductRelatedMarkets;
 }
 
 interface NavigationItem {
@@ -128,11 +129,19 @@ export function PrimarySidebar({
                   {t('sidebar.marketsLabel')}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {(currentProduct?.relatedMarkets.length ? currentProduct.relatedMarkets : [t('products.noMarketsSelected')]).map((market) => (
-                    <Badge className="bg-background" key={market} variant="secondary">
-                      {market}
+                  {currentProduct && getEnabledProductMarkets(currentProduct.relatedMarkets).length > 0 ? getEnabledProductMarkets(currentProduct.relatedMarkets).map((market) => {
+                    const settings = getProductMarketSettings(currentProduct.relatedMarkets, market);
+
+                    return (
+                      <Badge className="bg-background" key={market} variant="secondary">
+                        {market} · {getMsStoreLanguageLabel(settings.defaultLanguage)}
+                      </Badge>
+                    );
+                  }) : (
+                    <Badge className="bg-background" variant="secondary">
+                      {t('products.noMarketsSelected')}
                     </Badge>
-                  ))}
+                  )}
                 </div>
               </div>
             </div>

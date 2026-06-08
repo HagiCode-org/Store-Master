@@ -5,7 +5,22 @@ import { Button } from '@/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/card';
 import { Input } from '@/components/input';
 import { cn } from '@/lib/utils';
-import type { ProductDraft, ProductFieldErrors, ProductRecord, SupportedMarket } from '@/store/slices/productManagementSlice';
+import {
+  getMsStoreLanguageLabel,
+  supportedMsStoreLanguages,
+} from '../../../shared/ms-store-data';
+import {
+  getEnabledProductMarkets,
+  getProductMarketKey,
+  getProductMarketSettings,
+  type SupportedMarket,
+} from '../../../shared/products';
+import type {
+  ProductDraft,
+  ProductFieldErrors,
+  ProductRecord,
+  SupportedMarketKey,
+} from '@/store/slices/productManagementSlice';
 
 interface ProductsPageProps {
   currentProduct: ProductRecord | null;
@@ -15,17 +30,33 @@ interface ProductsPageProps {
   loadStatus: 'idle' | 'loading' | 'succeeded' | 'failed';
   onAddProduct: () => void;
   onDraftFieldChange: (field: keyof Pick<ProductDraft, 'name' | 'description' | 'folderName'>, value: string) => void;
+  onDraftMarketDefaultLanguageChange: (market: SupportedMarketKey, value: string) => void;
   onResetDraft: () => void;
   onSaveDraft: () => void;
   onSelectProduct: (productId: string) => void;
-  onToggleMarket: (market: SupportedMarket) => void;
+  onToggleMarket: (market: SupportedMarketKey) => void;
   products: ProductRecord[];
   selectedProductId: string;
   supportedMarkets: readonly SupportedMarket[];
 }
 
 function isProductReady(product: ProductDraft): boolean {
-  return product.name.trim().length > 0 && product.folderName.trim().length > 0 && product.relatedMarkets.length > 0;
+  return product.name.trim().length > 0 && product.folderName.trim().length > 0 && getEnabledProductMarkets(product.relatedMarkets).length > 0;
+}
+
+function renderMarketSummary(relatedMarkets: ProductDraft['relatedMarkets'] | ProductRecord['relatedMarkets'], t: ReturnType<typeof useTranslation>['t']): string {
+  const enabledMarkets = getEnabledProductMarkets(relatedMarkets);
+
+  if (enabledMarkets.length === 0) {
+    return t('products.noMarketsSelected');
+  }
+
+  return enabledMarkets
+    .map((market) => {
+      const settings = getProductMarketSettings(relatedMarkets, market);
+      return `${market} (${settings.defaultLanguage})`;
+    })
+    .join(', ');
 }
 
 export function ProductsPage({
@@ -36,6 +67,7 @@ export function ProductsPage({
   loadStatus,
   onAddProduct,
   onDraftFieldChange,
+  onDraftMarketDefaultLanguageChange,
   onResetDraft,
   onSaveDraft,
   onSelectProduct,
@@ -50,7 +82,7 @@ export function ProductsPage({
     name: '',
     description: '',
     folderName: '',
-    relatedMarkets: [],
+    relatedMarkets: draft.relatedMarkets,
     updatedAt: '-',
   };
 
@@ -116,7 +148,7 @@ export function ProductsPage({
                       {product.folderName || t('sidebar.folderFallback')}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
-                      {product.relatedMarkets.length > 0 ? product.relatedMarkets.join(', ') : t('products.noMarketsSelected')}
+                      {renderMarketSummary(product.relatedMarkets, t)}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-[13px] text-muted-foreground">{product.updatedAt}</td>
                   </tr>
@@ -169,11 +201,21 @@ export function ProductsPage({
                 {t('products.table.markets')}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
-                {(draft.relatedMarkets.length > 0 ? draft.relatedMarkets : [t('products.noMarketsSelected')]).map((market) => (
-                  <Badge className="bg-background" key={market} variant="secondary">
-                    {market}
-                  </Badge>
-                ))}
+                {getEnabledProductMarkets(draft.relatedMarkets).length > 0 ? supportedMarkets
+                  .filter((market) => getProductMarketSettings(draft.relatedMarkets, market).enabled)
+                  .map((market) => {
+                    const settings = getProductMarketSettings(draft.relatedMarkets, market);
+
+                    return (
+                      <Badge className="bg-background" key={market} variant="secondary">
+                        {market} · {getMsStoreLanguageLabel(settings.defaultLanguage)}
+                      </Badge>
+                    );
+                  }) : (
+                    <Badge className="bg-background" variant="secondary">
+                      {t('products.noMarketsSelected')}
+                    </Badge>
+                  )}
               </div>
             </div>
             <div>
@@ -232,19 +274,37 @@ export function ProductsPage({
               <legend className="text-sm font-medium text-foreground">{t('products.form.marketsLabel')}</legend>
               <div className="grid gap-2 sm:grid-cols-2">
                 {supportedMarkets.map((market) => {
-                  const checked = draft.relatedMarkets.includes(market);
+                  const marketKey = getProductMarketKey(market);
+                  const settings = draft.relatedMarkets[marketKey];
+                  const checked = settings.enabled;
 
                   return (
-                    <label
+                    <div
                       className={cn(
-                        'flex items-center gap-3 rounded-lg border px-3 py-3 text-sm transition-colors',
+                        'grid gap-3 rounded-lg border px-3 py-3 text-sm transition-colors',
                         checked ? 'border-primary/40 bg-primary/10 text-foreground' : 'border-border bg-background text-muted-foreground',
                       )}
                       key={market}
                     >
-                      <input aria-label={market} checked={checked} onChange={() => onToggleMarket(market)} type="checkbox" />
-                      <span>{market}</span>
-                    </label>
+                      <label className="flex items-center gap-3">
+                        <input aria-label={market} checked={checked} onChange={() => onToggleMarket(marketKey)} type="checkbox" />
+                        <span>{market}</span>
+                      </label>
+                      <label className="grid gap-2">
+                        <span className="text-xs font-medium text-foreground">{t('products.form.defaultLanguageLabel')}</span>
+                        <select
+                          aria-label={`${market} ${t('products.form.defaultLanguageLabel')}`}
+                          className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={!checked}
+                          onChange={(event) => onDraftMarketDefaultLanguageChange(marketKey, event.target.value)}
+                          value={settings.defaultLanguage}
+                        >
+                          {supportedMsStoreLanguages.map((language) => (
+                            <option key={language} value={language}>{getMsStoreLanguageLabel(language)}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
                   );
                 })}
               </div>

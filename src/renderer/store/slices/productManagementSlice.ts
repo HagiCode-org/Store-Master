@@ -1,13 +1,20 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import i18n from '@/locales';
 import { validateProductFolderName } from '@/lib/productFolderName';
+import {
+  cloneProductRelatedMarkets,
+  createDefaultProductRelatedMarkets,
+  getEnabledProductMarkets,
+} from '../../../shared/products';
 import { createTimestampLabel } from '../../../shared/ms-store-data';
 import {
   generateProductStorageId,
   normalizeProductRecords,
   supportedMarkets,
+  type ProductRelatedMarkets,
   type ProductRecord,
   type SupportedMarket,
+  type SupportedMarketKey,
 } from '../../../shared/products';
 
 type LoadStatus = 'idle' | 'loading' | 'succeeded' | 'failed';
@@ -16,7 +23,7 @@ export interface ProductDraft {
   name: string;
   description: string;
   folderName: string;
-  relatedMarkets: SupportedMarket[];
+  relatedMarkets: ProductRelatedMarkets;
 }
 
 export interface ProductFieldErrors {
@@ -40,7 +47,7 @@ function createEmptyDraft(): ProductDraft {
     name: '',
     description: '',
     folderName: '',
-    relatedMarkets: [],
+    relatedMarkets: createDefaultProductRelatedMarkets(),
   };
 }
 
@@ -49,7 +56,7 @@ function createDraft(product: ProductRecord): ProductDraft {
     name: product.name,
     description: product.description,
     folderName: product.folderName,
-    relatedMarkets: [...product.relatedMarkets],
+    relatedMarkets: cloneProductRelatedMarkets(product.relatedMarkets),
   };
 }
 
@@ -75,7 +82,7 @@ export function validateProductDraft(draft: ProductDraft): ProductFieldErrors {
     errors.folderName = folderNameError;
   }
 
-  if (draft.relatedMarkets.length === 0) {
+  if (getEnabledProductMarkets(draft.relatedMarkets).length === 0) {
     errors.relatedMarkets = 'validation.relatedMarketsRequired';
   }
 
@@ -129,7 +136,7 @@ const productManagementSlice = createSlice({
         name: '',
         description: '',
         folderName: '',
-        relatedMarkets: [],
+        relatedMarkets: createDefaultProductRelatedMarkets(),
         updatedAt: 'Draft',
       };
 
@@ -149,15 +156,20 @@ const productManagementSlice = createSlice({
         delete state.fieldErrors.folderName;
       }
     },
-    toggleDraftMarket(state, action: PayloadAction<SupportedMarket>) {
+    toggleDraftMarket(state, action: PayloadAction<SupportedMarketKey>) {
       const market = action.payload;
 
-      if (state.draft.relatedMarkets.includes(market)) {
-        state.draft.relatedMarkets = state.draft.relatedMarkets.filter((item) => item !== market);
-      } else {
-        state.draft.relatedMarkets = [...state.draft.relatedMarkets, market];
-      }
+      state.draft.relatedMarkets[market].enabled = !state.draft.relatedMarkets[market].enabled;
+      state.draft.relatedMarkets = cloneProductRelatedMarkets(state.draft.relatedMarkets);
 
+      delete state.fieldErrors.relatedMarkets;
+    },
+    updateDraftMarketDefaultLanguage(
+      state,
+      action: PayloadAction<{ market: SupportedMarketKey; value: ProductRelatedMarkets[SupportedMarketKey]['defaultLanguage'] }>,
+    ) {
+      state.draft.relatedMarkets[action.payload.market].defaultLanguage = action.payload.value;
+      state.draft.relatedMarkets = cloneProductRelatedMarkets(state.draft.relatedMarkets);
       delete state.fieldErrors.relatedMarkets;
     },
     resetDraft(state) {
@@ -177,7 +189,7 @@ const productManagementSlice = createSlice({
         name: state.draft.name.trim(),
         description: state.draft.description.trim(),
         folderName: state.draft.folderName.trim(),
-        relatedMarkets: [...state.draft.relatedMarkets],
+        relatedMarkets: cloneProductRelatedMarkets(state.draft.relatedMarkets),
       };
 
       const errors = validateProductDraft(normalizedDraft);
@@ -232,8 +244,16 @@ const productManagementSlice = createSlice({
   },
 });
 
-export const { selectProduct, createProduct, updateDraftField, toggleDraftMarket, resetDraft, saveDraft } = productManagementSlice.actions;
+export const {
+  selectProduct,
+  createProduct,
+  updateDraftField,
+  toggleDraftMarket,
+  updateDraftMarketDefaultLanguage,
+  resetDraft,
+  saveDraft,
+} = productManagementSlice.actions;
 
-export type { ProductRecord, SupportedMarket } from '../../../shared/products';
+export type { ProductRecord, ProductRelatedMarkets, SupportedMarket, SupportedMarketKey } from '../../../shared/products';
 
 export default productManagementSlice.reducer;

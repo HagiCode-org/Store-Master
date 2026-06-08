@@ -25,6 +25,10 @@ import {
   supportedMsStoreLanguages,
   type MsStoreDataEntry,
 } from '../../../shared/ms-store-data';
+import {
+  getEnabledProductMarkets,
+  getProductMarketSettings,
+} from '../../../shared/products';
 import type { MsStoreDataDraft } from '@/store/slices/msStoreDataSlice';
 import type { ProductRecord } from '@/store/slices/productManagementSlice';
 
@@ -77,6 +81,7 @@ export function LanguagesPage({
 }: LanguagesPageProps) {
   const { t } = useTranslation();
   const [newLocale, setNewLocale] = useState<string | null>(null);
+  const defaultLocale = currentProduct?.relatedMarkets.msStore.defaultLanguage ?? '';
 
   const productOptions = useMemo(() => products.map((product) => ({
     value: product.id,
@@ -207,9 +212,15 @@ export function LanguagesPage({
               <p className="mt-1 text-sm text-muted-foreground">{t('msStore.languagesPage.contextDescription')}</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {currentProduct.relatedMarkets.map((market) => (
-                <Badge key={market} variant="secondary">{market}</Badge>
-              ))}
+              {getEnabledProductMarkets(currentProduct.relatedMarkets).map((market) => {
+                const settings = getProductMarketSettings(currentProduct.relatedMarkets, market);
+
+                return (
+                  <Badge key={market} variant="secondary">
+                    {market} · {getMsStoreLanguageLabel(settings.defaultLanguage)}
+                  </Badge>
+                );
+              })}
             </div>
           </div>
 
@@ -246,6 +257,7 @@ export function LanguagesPage({
         <CardContent className="grid gap-3 pt-4">
           {localeGroups.length > 0 ? localeGroups.map((group) => {
             const entry = group.entries[0];
+            const isDefaultLocale = defaultLocale.length > 0 && normalizeLocaleKey(group.locale) === normalizeLocaleKey(defaultLocale);
 
             return (
               <div
@@ -262,6 +274,7 @@ export function LanguagesPage({
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <Badge variant="outline">{group.locale}</Badge>
+                    {isDefaultLocale ? <Badge variant="secondary">{t('msStore.defaultLanguageBadge')}</Badge> : null}
                     <span>{t('msStore.table.updated')}: {group.latestUpdatedAt}</span>
                   </div>
                 </div>
@@ -271,6 +284,7 @@ export function LanguagesPage({
                     {t('msStore.languagesPage.editAction')}
                   </Button>
                   <Button
+                    disabled={isDefaultLocale}
                     onClick={() => entry && onDeleteEntry(entry.id)}
                     type="button"
                     variant="outline"

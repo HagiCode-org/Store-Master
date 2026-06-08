@@ -79,7 +79,6 @@ describe('Store Master app shell', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save record' }));
 
-    expect(screen.getByText('Locale is required.')).toBeInTheDocument();
     expect(screen.getByText('Title is required.')).toBeInTheDocument();
     expect(screen.getByText('Short description is required.')).toBeInTheDocument();
     expect(screen.getByText('Description is required.')).toBeInTheDocument();
@@ -100,8 +99,7 @@ describe('Store Master app shell', () => {
       'prd-11111111-1111-4111-8111-111111111111',
       expect.objectContaining({
         productStorageId: 'prd-11111111-1111-4111-8111-111111111111',
-        version: 2,
-        defaultValues: {},
+        version: 3,
         entries: [expect.objectContaining({
           locale: 'en-US',
           fieldValues: expect.objectContaining({
@@ -152,8 +150,7 @@ describe('Store Master app shell', () => {
   it('saves a new locale record when existing locale rows are already loaded', async () => {
     vi.mocked(window.storeMaster.readMsStoreData).mockResolvedValueOnce({
       productStorageId: 'prd-11111111-1111-4111-8111-111111111111',
-      version: 2,
-      defaultValues: {},
+      version: 3,
       entries: [
         {
           id: 'ms-existing',
@@ -202,8 +199,7 @@ describe('Store Master app shell', () => {
   it('deletes a locale record from the Languages page', async () => {
     vi.mocked(window.storeMaster.readMsStoreData).mockResolvedValueOnce({
       productStorageId: 'prd-11111111-1111-4111-8111-111111111111',
-      version: 2,
-      defaultValues: {},
+      version: 3,
       entries: [
         {
           id: 'ms-existing',
@@ -218,6 +214,19 @@ describe('Store Master app shell', () => {
           createdAt: '2026-06-08 10:00',
           updatedAt: '2026-06-08 10:00',
         },
+        {
+          id: 'ms-zh',
+          productStorageId: 'prd-11111111-1111-4111-8111-111111111111',
+          locale: 'zh-CN',
+          keywords: ['桌面'],
+          fieldValues: {
+            '4': '现有标题',
+            '8': '现有摘要',
+            '2': '现有描述',
+          },
+          createdAt: '2026-06-08 10:05',
+          updatedAt: '2026-06-08 10:05',
+        },
       ],
     });
 
@@ -229,17 +238,19 @@ describe('Store Master app shell', () => {
       expect(screen.getByText('English (United States)')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[1]);
 
     await waitFor(() => {
       expect(window.storeMaster.writeMsStoreData).toHaveBeenCalledWith(
         'prd-11111111-1111-4111-8111-111111111111',
         expect.objectContaining({
-          entries: [],
+          entries: [
+            expect.objectContaining({
+              locale: 'en-US',
+            }),
+          ],
         }),
       );
     });
-
-    expect(screen.getByText('No locale records exist for the active product yet.')).toBeInTheDocument();
   });
 });

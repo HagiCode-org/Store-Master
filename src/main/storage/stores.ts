@@ -3,6 +3,7 @@ import type {
   MsStoreDataDataset,
   MsStoreDataExportResult,
   MsStoreDataImportResult,
+  SupportedMsStoreLanguage,
 } from '../../shared/ms-store-data.js';
 import {
   createMsStoreDataImportResult,
@@ -13,6 +14,7 @@ import {
   serializeMsStoreDataDatasetToCsv,
 } from '../../shared/ms-store-data.js';
 import {
+  createDefaultProductRelatedMarkets,
   isProductRecord,
   isProductRecordArray,
   normalizeProductRecords,
@@ -31,7 +33,17 @@ const defaultProducts: ProductRecord[] = [
     name: 'Signal Desk',
     description: 'Desktop release workspace for managing store metadata snapshots before publication.',
     folderName: 'signal-desk',
-    relatedMarkets: ['Steam', 'MS Store'],
+    relatedMarkets: {
+      ...createDefaultProductRelatedMarkets(),
+      steam: {
+        enabled: true,
+        defaultLanguage: 'en-US',
+      },
+      msStore: {
+        enabled: true,
+        defaultLanguage: 'en-US',
+      },
+    },
     updatedAt: '2026-06-07 10:40',
   },
   {
@@ -40,7 +52,13 @@ const defaultProducts: ProductRecord[] = [
     name: 'Patch Harbor',
     description: 'Release engineering console for patch coordination and submission readiness checks.',
     folderName: 'patch-harbor',
-    relatedMarkets: ['Steam'],
+    relatedMarkets: {
+      ...createDefaultProductRelatedMarkets(),
+      steam: {
+        enabled: true,
+        defaultLanguage: 'en-US',
+      },
+    },
     updatedAt: '2026-06-07 09:10',
   },
 ];
@@ -49,7 +67,7 @@ function createProductSnapshotDefinition(product: ProductRecord): StoreDefinitio
   return {
     key: `product-snapshot:${product.productStorageId}`,
     fileName: resolveProductScopedFileName(product.productStorageId, 'product.json'),
-    version: 1,
+    version: 3,
     defaultData: product,
     validate: isProductRecord,
   };
@@ -59,7 +77,7 @@ function createMsStoreDataDefinition(productStorageId: string): StoreDefinition<
   return {
     key: `ms-store-data:${productStorageId}`,
     fileName: resolveProductScopedFileName(productStorageId, 'ms-store-data.json'),
-    version: 2,
+    version: 3,
     defaultData: createEmptyMsStoreDataDataset(productStorageId),
     validate: (data): data is MsStoreDataDataset => {
       return isMsStoreDataDataset(data) && data.productStorageId === productStorageId;
@@ -71,7 +89,7 @@ function createMsStoreDataDefinition(productStorageId: string): StoreDefinition<
 export const productsStore = createStoreHandle<ProductRecord[]>({
   key: 'products',
   fileName: 'products.json',
-  version: 2,
+  version: 3,
   defaultData: defaultProducts,
   validate: isProductRecordArray,
   migrate: (_fromVersion, data) => normalizeProductRecords(data) ?? defaultProducts,
@@ -121,11 +139,15 @@ export async function writeProductMsStoreData(productStorageId: string, dataset:
   await writeStore(resolveStorePath(definition.fileName), definition, dataset);
 }
 
-export async function importProductMsStoreDataFromFile(productStorageId: string, filePath: string): Promise<MsStoreDataImportResult> {
+export async function importProductMsStoreDataFromFile(
+  productStorageId: string,
+  filePath: string,
+  defaultLocale: SupportedMsStoreLanguage,
+): Promise<MsStoreDataImportResult> {
   try {
     const raw = await fs.readFile(filePath, 'utf8');
     const currentDataset = await readProductMsStoreData(productStorageId);
-    return createMsStoreDataImportResult(raw, productStorageId, currentDataset, filePath);
+    return createMsStoreDataImportResult(raw, productStorageId, currentDataset, filePath, defaultLocale);
   } catch {
     return {
       success: false,
@@ -139,7 +161,11 @@ export async function importProductMsStoreDataFromFile(productStorageId: string,
   }
 }
 
-export async function exportProductMsStoreDataToFile(filePath: string, dataset: MsStoreDataDataset): Promise<MsStoreDataExportResult> {
+export async function exportProductMsStoreDataToFile(
+  filePath: string,
+  dataset: MsStoreDataDataset,
+  defaultLocale: SupportedMsStoreLanguage,
+): Promise<MsStoreDataExportResult> {
   const normalizedDataset = normalizeMsStoreDataDataset(dataset, dataset.productStorageId);
 
   if (!normalizedDataset) {
@@ -150,7 +176,7 @@ export async function exportProductMsStoreDataToFile(filePath: string, dataset: 
     };
   }
 
-  const exportError = getMsStoreDataExportError(normalizedDataset);
+  const exportError = getMsStoreDataExportError(normalizedDataset, defaultLocale);
   if (exportError) {
     return {
       success: false,
@@ -159,7 +185,7 @@ export async function exportProductMsStoreDataToFile(filePath: string, dataset: 
     };
   }
 
-  const csvDocument = serializeMsStoreDataDatasetToCsv(normalizedDataset);
+  const csvDocument = serializeMsStoreDataDatasetToCsv(normalizedDataset, defaultLocale);
   if (!csvDocument) {
     return {
       success: false,

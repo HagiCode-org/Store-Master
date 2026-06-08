@@ -9,7 +9,16 @@ const defaultProducts = [
     name: 'Signal Desk',
     description: 'Desktop release workspace for managing store metadata snapshots before publication.',
     folderName: 'signal-desk',
-    relatedMarkets: ['Steam', 'MS Store'],
+    relatedMarkets: {
+      steam: {
+        enabled: true,
+        defaultLanguage: 'en-US',
+      },
+      msStore: {
+        enabled: true,
+        defaultLanguage: 'en-US',
+      },
+    },
     updatedAt: '2026-06-07 10:40',
   },
   {
@@ -18,7 +27,16 @@ const defaultProducts = [
     name: 'Patch Harbor',
     description: 'Release engineering console for patch coordination and submission readiness checks.',
     folderName: 'patch-harbor',
-    relatedMarkets: ['Steam'],
+    relatedMarkets: {
+      steam: {
+        enabled: true,
+        defaultLanguage: 'en-US',
+      },
+      msStore: {
+        enabled: false,
+        defaultLanguage: 'en-US',
+      },
+    },
     updatedAt: '2026-06-07 09:10',
   },
 ];
@@ -36,8 +54,7 @@ beforeEach(() => {
       writeProducts: vi.fn().mockResolvedValue(true),
       readMsStoreData: vi.fn().mockImplementation(async (productStorageId: string) => ({
         productStorageId,
-        version: 2,
-        defaultValues: {},
+        version: 3,
         entries: [],
       })),
       writeMsStoreData: vi.fn().mockResolvedValue(true),

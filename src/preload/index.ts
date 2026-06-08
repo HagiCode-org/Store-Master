@@ -37,6 +37,7 @@ import type {
   MsStoreDataDataset,
   MsStoreDataExportResult,
   MsStoreDataImportResult,
+  SupportedMsStoreLanguage,
 } from '../shared/ms-store-data.js';
 import type { ProductRecord } from '../shared/products.js';
 
@@ -115,8 +116,8 @@ const storeMasterApi = {
   writeProducts: (products: ProductRecord[]) => ipcRenderer.invoke('store-master:write-products', products) as Promise<boolean>,
   readMsStoreData: (productStorageId: string) => ipcRenderer.invoke('store-master:read-ms-store-data', productStorageId) as Promise<MsStoreDataDataset>,
   writeMsStoreData: (productStorageId: string, dataset: MsStoreDataDataset) => ipcRenderer.invoke('store-master:write-ms-store-data', productStorageId, dataset) as Promise<boolean>,
-  importMsStoreData: (productStorageId: string) => ipcRenderer.invoke('store-master:import-ms-store-data', productStorageId) as Promise<MsStoreDataImportResult>,
-  exportMsStoreData: (productStorageId: string, dataset: MsStoreDataDataset) => ipcRenderer.invoke('store-master:export-ms-store-data', productStorageId, dataset) as Promise<MsStoreDataExportResult>,
+  importMsStoreData: (productStorageId: string, defaultLocale: SupportedMsStoreLanguage) => ipcRenderer.invoke('store-master:import-ms-store-data', productStorageId, defaultLocale) as Promise<MsStoreDataImportResult>,
+  exportMsStoreData: (productStorageId: string, defaultLocale: SupportedMsStoreLanguage, dataset: MsStoreDataDataset) => ipcRenderer.invoke('store-master:export-ms-store-data', productStorageId, defaultLocale, dataset) as Promise<MsStoreDataExportResult>,
 };
 
 contextBridge.exposeInMainWorld('hagihub', hagihubApi);

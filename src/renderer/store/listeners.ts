@@ -1,5 +1,6 @@
 import { createAction, type TypedStartListening } from '@reduxjs/toolkit';
 import type { AppDispatch, RootState } from '@/store';
+import type { SupportedMsStoreLanguage } from '../../shared/ms-store-data';
 import { listenerMiddleware } from './listenerMiddleware';
 import { loadManagedWorkflows, refreshManagedWorkflows, resetActionManagement } from './slices/actionManagementSlice';
 import { fetchAccounts } from './slices/githubAccountsSlice';
@@ -11,8 +12,8 @@ import {
   importMsStoreData,
   loadMsStoreData,
   saveMsStoreDraft,
+  setMsStoreDefaultLocale,
   selectMsStoreDataset,
-  updateMsStoreDefaultFieldValue,
 } from './slices/msStoreDataSlice';
 import { setActiveSection } from './slices/navigationSlice';
 import {
@@ -84,8 +85,17 @@ function resolveActiveProductStorageId(state: RootState): string {
   return selectedProduct?.productStorageId ?? '';
 }
 
+function resolveActiveProductDefaultLocale(state: RootState): SupportedMsStoreLanguage | '' {
+  const selectedProduct = state.productManagement.products.find(
+    (product) => product.id === state.productManagement.selectedProductId,
+  );
+
+  return selectedProduct?.relatedMarkets.msStore.defaultLanguage ?? '';
+}
+
 function syncMsStoreDataForActiveProduct(dispatch: AppDispatch, state: RootState): void {
   const productStorageId = resolveActiveProductStorageId(state);
+  const defaultLocale = resolveActiveProductDefaultLocale(state);
 
   if (!productStorageId) {
     dispatch(clearMsStoreWorkspace());
@@ -95,9 +105,20 @@ function syncMsStoreDataForActiveProduct(dispatch: AppDispatch, state: RootState
   const alreadyLoaded = state.msStoreData.activeProductStorageId === productStorageId
     && (state.msStoreData.loadStatus === 'loading' || state.msStoreData.loadStatus === 'succeeded');
 
-  if (!alreadyLoaded) {
-    void dispatch(loadMsStoreData(productStorageId));
+  if (alreadyLoaded) {
+    if (defaultLocale && state.msStoreData.defaultLocale !== defaultLocale) {
+      dispatch(setMsStoreDefaultLocale(defaultLocale));
+    }
+
+    return;
   }
+
+  if (!defaultLocale) {
+    dispatch(clearMsStoreWorkspace());
+    return;
+  }
+
+  void dispatch(loadMsStoreData({ productStorageId, defaultLocale }));
 }
 
 export function registerStoreListeners(): void {
@@ -194,10 +215,9 @@ export function registerStoreListeners(): void {
       }
 
       const entriesChanged = previousState.msStoreData.entries !== currentState.msStoreData.entries;
-      const defaultsChanged = previousState.msStoreData.defaultValues !== currentState.msStoreData.defaultValues;
 
       return (
-        ((saveMsStoreDraft.match(action) || updateMsStoreDefaultFieldValue.match(action)) && (entriesChanged || defaultsChanged))
+        (saveMsStoreDraft.match(action) && entriesChanged)
         || (deleteSelectedMsStoreEntry.match(action) && entriesChanged)
         || (importMsStoreData.fulfilled.match(action) && action.payload.success)
       );

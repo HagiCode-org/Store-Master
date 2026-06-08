@@ -15,6 +15,7 @@ import type {
   MsStoreDataDataset,
   MsStoreDataExportResult,
   MsStoreDataImportResult,
+  SupportedMsStoreLanguage,
 } from '../shared/ms-store-data.js';
 import type { ProductRecord } from '../shared/products.js';
 
@@ -167,7 +168,11 @@ ipcMain.handle('store-master:write-ms-store-data', async (_event, productStorage
   await writeProductMsStoreData(productStorageId, dataset);
   return true;
 });
-ipcMain.handle('store-master:import-ms-store-data', async (_event, productStorageId: string): Promise<MsStoreDataImportResult> => {
+ipcMain.handle('store-master:import-ms-store-data', async (
+  _event,
+  productStorageId: string,
+  defaultLocale: SupportedMsStoreLanguage,
+): Promise<MsStoreDataImportResult> => {
   const window = BrowserWindow.getFocusedWindow() ?? mainWindow;
   const selection = window ? await dialog.showOpenDialog(window, {
     properties: ['openFile'],
@@ -186,9 +191,14 @@ ipcMain.handle('store-master:import-ms-store-data', async (_event, productStorag
     };
   }
 
-  return importProductMsStoreDataFromFile(productStorageId, filePath);
+  return importProductMsStoreDataFromFile(productStorageId, filePath, defaultLocale);
 });
-ipcMain.handle('store-master:export-ms-store-data', async (_event, productStorageId: string, dataset: MsStoreDataDataset): Promise<MsStoreDataExportResult> => {
+ipcMain.handle('store-master:export-ms-store-data', async (
+  _event,
+  productStorageId: string,
+  defaultLocale: SupportedMsStoreLanguage,
+  dataset: MsStoreDataDataset,
+): Promise<MsStoreDataExportResult> => {
   const window = BrowserWindow.getFocusedWindow() ?? mainWindow;
   const selection = window ? await dialog.showSaveDialog(window, {
     filters: [{ name: 'CSV', extensions: ['csv'] }],
@@ -206,12 +216,22 @@ ipcMain.handle('store-master:export-ms-store-data', async (_event, productStorag
     };
   }
 
-  return exportProductMsStoreDataToFile(selection.filePath, dataset);
+  return exportProductMsStoreDataToFile(selection.filePath, dataset, defaultLocale);
 });
 
-ipcMain.handle('store-master:export-ms-store-data-to-path', async (_event, filePath: string, dataset: MsStoreDataDataset): Promise<MsStoreDataExportResult> => {
-  return exportProductMsStoreDataToFile(filePath, dataset);
+ipcMain.handle('store-master:export-ms-store-data-to-path', async (
+  _event,
+  filePath: string,
+  defaultLocale: SupportedMsStoreLanguage,
+  dataset: MsStoreDataDataset,
+): Promise<MsStoreDataExportResult> => {
+  return exportProductMsStoreDataToFile(filePath, dataset, defaultLocale);
 });
-ipcMain.handle('store-master:import-ms-store-data-from-path', async (_event, productStorageId: string, filePath: string): Promise<MsStoreDataImportResult> => {
-  return importProductMsStoreDataFromFile(productStorageId, filePath);
+ipcMain.handle('store-master:import-ms-store-data-from-path', async (
+  _event,
+  productStorageId: string,
+  filePath: string,
+  defaultLocale: SupportedMsStoreLanguage,
+): Promise<MsStoreDataImportResult> => {
+  return importProductMsStoreDataFromFile(productStorageId, filePath, defaultLocale);
 });

@@ -135,8 +135,7 @@ export interface MsStoreDataEntry {
 
 export interface MsStoreDataDataset {
   productStorageId: string;
-  version: 2;
-  defaultValues: Record<string, string>;
+  version: 3;
   entries: MsStoreDataEntry[];
 }
 
@@ -149,7 +148,7 @@ export interface MsStoreDataValidationErrors {
 }
 
 export interface MsStoreDataImportError {
-  field: keyof MsStoreDataEntry | 'dataset' | 'defaultValues' | 'csv';
+  field: keyof MsStoreDataEntry | 'dataset' | 'csv';
   index: number | null;
   messageKey: string;
 }
@@ -368,8 +367,7 @@ export function createEmptyMsStoreDataEntry(productStorageId: string): MsStoreDa
 export function createEmptyMsStoreDataDataset(productStorageId: string): MsStoreDataDataset {
   return {
     productStorageId,
-    version: 2,
-    defaultValues: {},
+    version: 3,
     entries: [],
   };
 }
@@ -446,16 +444,6 @@ export function validateMsStoreDataDataset(dataset: MsStoreDataDataset): MsStore
   const errors: MsStoreDataImportError[] = [];
   const seenKeys = new Set<string>();
 
-  Object.keys(dataset.defaultValues).forEach((fieldId) => {
-    if (!msStoreFieldRegistryById.has(fieldId)) {
-      errors.push({
-        field: 'defaultValues',
-        index: null,
-        messageKey: 'validation.msStore.unsupportedFieldMetadata',
-      });
-    }
-  });
-
   dataset.entries.forEach((entry, index) => {
     const fieldErrors = validateMsStoreDataEntry(entry);
 
@@ -519,11 +507,6 @@ export function normalizeMsStoreDataDataset(input: unknown, productStorageId: st
     return null;
   }
 
-  const normalizedDefaults = normalizeFieldRecord(candidate.defaultValues);
-  if (candidate.defaultValues !== undefined && normalizedDefaults.hasUnknownKeys) {
-    return null;
-  }
-
   const entries = candidate.entries.map((entry) => normalizeMsStoreDataEntry(entry, productStorageId));
   if (!entries.every((entry): entry is MsStoreDataEntry => entry !== null)) {
     return null;
@@ -531,8 +514,7 @@ export function normalizeMsStoreDataDataset(input: unknown, productStorageId: st
 
   return {
     productStorageId,
-    version: 2,
-    defaultValues: normalizedDefaults.values,
+    version: 3,
     entries,
   };
 }
@@ -683,12 +665,30 @@ function escapeCsvCell(value: string): string {
   return value;
 }
 
-function createMsStoreCsvRows(dataset: MsStoreDataDataset): string[][] | null {
-  if (getMsStoreDataExportError(dataset)) {
+export function findMsStoreEntryByLocale(
+  entries: readonly MsStoreDataEntry[],
+  locale: string,
+): MsStoreDataEntry | null {
+  const normalizedLocale = normalizeSupportedMsStoreLanguage(locale) ?? locale.trim();
+
+  return entries.find((entry) => {
+    const entryLocale = normalizeSupportedMsStoreLanguage(entry.locale) ?? entry.locale.trim();
+    return entryLocale === normalizedLocale;
+  }) ?? null;
+}
+
+function createMsStoreCsvRows(dataset: MsStoreDataDataset, defaultLocale: SupportedMsStoreLanguage): string[][] | null {
+  if (getMsStoreDataExportError(dataset, defaultLocale)) {
     return null;
   }
 
   const localeEntryMap = new Map<SupportedMsStoreCsvLanguage, MsStoreDataEntry>();
+  const defaultCsvLanguage = uiLanguageToCsvLanguage[defaultLocale];
+  const defaultEntry = findMsStoreEntryByLocale(dataset.entries, defaultLocale);
+
+  if (!defaultEntry) {
+    return null;
+  }
 
   for (const entry of dataset.entries) {
     const csvLanguage = normalizeMsStoreCsvLanguageCode(entry.locale);
@@ -710,14 +710,25 @@ function createMsStoreCsvRows(dataset: MsStoreDataDataset): string[][] | null {
       definition.field,
       definition.id,
       definition.type,
-      dataset.defaultValues[definition.id] ?? '',
-      ...supportedMsStoreCsvLanguages.map((language) => localeEntryMap.get(language)?.fieldValues[definition.id] ?? ''),
+      defaultEntry.fieldValues[definition.id] ?? '',
+      ...supportedMsStoreCsvLanguages.map((language) => (
+        language === defaultCsvLanguage ? '' : localeEntryMap.get(language)?.fieldValues[definition.id] ?? ''
+      )),
     ]),
   ];
 }
 
-export function getMsStoreDataExportError(dataset: MsStoreDataDataset): string | null {
+export function getMsStoreDataExportError(dataset: MsStoreDataDataset, defaultLocale: string): string | null {
+  const normalizedDefaultLocale = normalizeSupportedMsStoreLanguage(defaultLocale);
   const localeEntryMap = new Set<SupportedMsStoreCsvLanguage>();
+
+  if (!normalizedDefaultLocale) {
+    return 'validation.msStore.exportInvalidWorkspace';
+  }
+
+  if (!findMsStoreEntryByLocale(dataset.entries, normalizedDefaultLocale)) {
+    return 'validation.msStore.defaultLanguageContentRequired';
+  }
 
   for (const entry of dataset.entries) {
     const csvLanguage = normalizeMsStoreCsvLanguageCode(entry.locale);
@@ -740,8 +751,8 @@ export function getMsStoreDataExportError(dataset: MsStoreDataDataset): string |
   return null;
 }
 
-export function serializeMsStoreDataDatasetToCsv(dataset: MsStoreDataDataset): string | null {
-  const csvRows = createMsStoreCsvRows(dataset);
+export function serializeMsStoreDataDatasetToCsv(dataset: MsStoreDataDataset, defaultLocale: SupportedMsStoreLanguage): string | null {
+  const csvRows = createMsStoreCsvRows(dataset, defaultLocale);
 
   if (!csvRows) {
     return null;
@@ -764,11 +775,16 @@ function collectPopulatedCsvLanguages(rows: readonly ParsedMsStoreCsvRow[]): Set
   return populatedLanguages;
 }
 
+function hasPopulatedDefaultColumn(rows: readonly ParsedMsStoreCsvRow[]): boolean {
+  return rows.some((row) => row.defaultValue.trim().length > 0);
+}
+
 export function createMsStoreDataImportResult(
   csvText: string,
   productStorageId: string,
   currentDataset: MsStoreDataDataset,
   filePath: string,
+  defaultLocale: SupportedMsStoreLanguage,
 ): MsStoreDataImportResult {
   const dataset = normalizeMsStoreDataDataset(currentDataset, productStorageId);
 
@@ -809,6 +825,7 @@ export function createMsStoreDataImportResult(
     };
   }
 
+  const defaultCsvLanguage = uiLanguageToCsvLanguage[defaultLocale];
   const localeEntryGroups = new Map<SupportedMsStoreCsvLanguage, MsStoreDataEntry[]>();
 
   dataset.entries.forEach((entry) => {
@@ -824,19 +841,12 @@ export function createMsStoreDataImportResult(
   });
 
   const populatedLanguages = collectPopulatedCsvLanguages(parsedRows);
+  const hasDefaultColumnContent = hasPopulatedDefaultColumn(parsedRows);
+  const hasDefaultLocaleColumnContent = parsedRows.some((row) => row.values[defaultCsvLanguage].trim().length > 0);
   const errors: MsStoreDataImportError[] = [];
 
   populatedLanguages.forEach((language) => {
     const matches = localeEntryGroups.get(language) ?? [];
-
-    if (matches.length === 0) {
-      errors.push({
-        field: 'dataset',
-        index: null,
-        messageKey: 'validation.msStore.importLocaleMissingEntry',
-      });
-      return;
-    }
 
     if (matches.length > 1) {
       errors.push({
@@ -855,37 +865,97 @@ export function createMsStoreDataImportResult(
     };
   }
 
-  const nextDefaultValues = { ...dataset.defaultValues };
-  parsedRows.forEach((row) => {
-    setFieldRecordValue(nextDefaultValues, row.definition.id, row.defaultValue);
-  });
+  const nextEntries = dataset.entries.map((entry) => ({ ...entry, fieldValues: { ...entry.fieldValues } }));
+  const nextEntryMap = new Map<SupportedMsStoreCsvLanguage, MsStoreDataEntry>();
 
-  const nextEntries = dataset.entries.map((entry) => {
+  nextEntries.forEach((entry) => {
     const csvLanguage = normalizeMsStoreCsvLanguageCode(entry.locale);
 
-    if (!csvLanguage || !populatedLanguages.has(csvLanguage)) {
-      return entry;
+    if (!csvLanguage) {
+      return;
     }
 
-    const nextFieldValues = { ...entry.fieldValues };
+    nextEntryMap.set(csvLanguage, entry);
+  });
+
+  if ((hasDefaultColumnContent || hasDefaultLocaleColumnContent) && !nextEntryMap.has(defaultCsvLanguage)) {
+    const nextEntry = createEmptyMsStoreDataEntry(productStorageId);
+    nextEntry.locale = defaultLocale;
+    nextEntries.push(nextEntry);
+    nextEntryMap.set(defaultCsvLanguage, nextEntry);
+  }
+
+  populatedLanguages.forEach((language) => {
+    if (language === defaultCsvLanguage) {
+      return;
+    }
+
+    if (nextEntryMap.has(language)) {
+      return;
+    }
+
+    const nextEntry = createEmptyMsStoreDataEntry(productStorageId);
+    nextEntry.locale = csvLanguageToUiLanguage[language];
+    nextEntries.push(nextEntry);
+    nextEntryMap.set(language, nextEntry);
+  });
+
+  if (hasDefaultColumnContent || hasDefaultLocaleColumnContent) {
+    const defaultEntry = nextEntryMap.get(defaultCsvLanguage);
+
+    if (defaultEntry) {
+      const nextFieldValues: Record<string, string> = {};
+      parsedRows.forEach((row) => {
+        const nextValue = row.values[defaultCsvLanguage].trim().length > 0
+          ? row.values[defaultCsvLanguage]
+          : row.defaultValue;
+
+        setFieldRecordValue(nextFieldValues, row.definition.id, nextValue);
+      });
+
+      defaultEntry.fieldValues = nextFieldValues;
+      defaultEntry.updatedAt = createTimestampLabel();
+    }
+  }
+
+  populatedLanguages.forEach((language) => {
+    if (language === defaultCsvLanguage) {
+      return;
+    }
+
+    const nextEntry = nextEntryMap.get(language);
+
+    if (!nextEntry) {
+      return;
+    }
+
+    const nextFieldValues: Record<string, string> = {};
     parsedRows.forEach((row) => {
-      setFieldRecordValue(nextFieldValues, row.definition.id, row.values[csvLanguage]);
+      setFieldRecordValue(nextFieldValues, row.definition.id, row.values[language]);
     });
 
-    return {
-      ...entry,
-      fieldValues: nextFieldValues,
-      updatedAt: createTimestampLabel(),
-    } satisfies MsStoreDataEntry;
+    nextEntry.fieldValues = nextFieldValues;
+    nextEntry.updatedAt = createTimestampLabel();
   });
+
+  if (!findMsStoreEntryByLocale(nextEntries, defaultLocale)) {
+    return {
+      success: false,
+      filePath,
+      errors: [{
+        field: 'dataset',
+        index: null,
+        messageKey: 'validation.msStore.defaultLanguageContentRequired',
+      }],
+    };
+  }
 
   return {
     success: true,
     filePath,
     dataset: {
       productStorageId,
-      version: 2,
-      defaultValues: nextDefaultValues,
+      version: 3,
       entries: nextEntries,
     },
     errors: [],
