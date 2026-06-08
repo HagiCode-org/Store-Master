@@ -1,4 +1,5 @@
-import { ArrowLeft, FileDown, FileUp, FileWarning, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
+import { useDeferredValue, useState } from 'react';
+import { ArrowLeft, FileDown, FileUp, FileWarning, Plus, RotateCcw, Save, Search, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/badge';
 import { Button } from '@/components/button';
@@ -6,25 +7,27 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/input';
 import { SearchableSelect } from '@/components/searchable-select';
 import { cn } from '@/lib/utils';
-import { getMsStoreLanguageLabel, supportedMsStoreLanguages } from '../../../shared/ms-store-data';
-import type {
-  MsStoreDataDraft,
-  MsStoreDataImportError,
-  MsStoreDataValidationErrors,
-} from '@/store/slices/msStoreDataSlice';
+import {
+  type MsStoreDataImportError,
+  type MsStoreDataValidationErrors,
+  getMsStoreEntryCoreFieldValue,
+  getMsStoreLanguageLabel,
+  isBooleanMsStoreField,
+  isLongTextMsStoreField,
+  msStoreCoreFieldIds,
+  msStoreFieldRegistry,
+  supportedMsStoreLanguages,
+  type MsStoreDataEntry,
+  type MsStoreFieldDefinition,
+} from '../../../shared/ms-store-data';
+import type { MsStoreDataDraft } from '@/store/slices/msStoreDataSlice';
 import type { ProductRecord } from '@/store/slices/productManagementSlice';
 
 interface ProductProfilePageProps {
   currentProduct: ProductRecord | null;
+  defaultValues: Record<string, string>;
   draft: MsStoreDataDraft | null;
-  entries: Array<{
-    id: string;
-    locale: string;
-    market: string;
-    storeId: string;
-    title: string;
-    updatedAt: string;
-  }>;
+  entries: MsStoreDataEntry[];
   exportError: string | null;
   exportPath: string | null;
   exportStatus: 'idle' | 'loading' | 'succeeded' | 'failed';
@@ -36,8 +39,10 @@ interface ProductProfilePageProps {
   loadStatus: 'idle' | 'loading' | 'succeeded' | 'failed';
   onAddEntry: () => void;
   onClearMessages: () => void;
+  onDefaultFieldChange: (fieldId: string, value: string) => void;
   onDeleteEntry: () => void;
   onDraftFieldChange: (field: keyof Pick<MsStoreDataDraft, 'locale' | 'market' | 'storeId' | 'title' | 'subtitle' | 'shortDescription' | 'description' | 'keywordsText'>, value: string) => void;
+  onDraftInventoryFieldChange: (fieldId: string, value: string) => void;
   onExport: () => void;
   onImport: () => void;
   onOpenProducts: () => void;
@@ -50,6 +55,13 @@ interface ProductProfilePageProps {
   selectedProductId: string;
 }
 
+const coreFieldIdSet = new Set(Object.values(msStoreCoreFieldIds));
+
+function translateMaybe(t: ReturnType<typeof useTranslation>['t'], value: string): string {
+  const translated = t(value);
+  return translated === value ? value : translated;
+}
+
 function renderImportErrorLabel(t: ReturnType<typeof useTranslation>['t'], error: MsStoreDataImportError): string {
   if (error.index === null) {
     return t(error.messageKey);
@@ -58,8 +70,62 @@ function renderImportErrorLabel(t: ReturnType<typeof useTranslation>['t'], error
   return `${t('msStore.importErrorPrefix', { index: error.index + 1 })}: ${t(error.messageKey)}`;
 }
 
+function ValueEditor({
+  fieldDefinition,
+  label,
+  value,
+  onChange,
+}: {
+  fieldDefinition: MsStoreFieldDefinition;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const editorId = `${fieldDefinition.id}-${label.replace(/\s+/g, '-').toLowerCase()}`;
+
+  if (isBooleanMsStoreField(fieldDefinition)) {
+    return (
+      <label className="grid gap-2">
+        <span className="text-sm font-medium text-foreground">{label}</span>
+        <select
+          className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15"
+          id={editorId}
+          onChange={(event) => onChange(event.target.value)}
+          value={value}
+        >
+          <option value="">-</option>
+          <option value="True">True</option>
+          <option value="False">False</option>
+        </select>
+      </label>
+    );
+  }
+
+  if (isLongTextMsStoreField(fieldDefinition)) {
+    return (
+      <label className="grid gap-2">
+        <span className="text-sm font-medium text-foreground">{label}</span>
+        <textarea
+          className="min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15"
+          id={editorId}
+          onChange={(event) => onChange(event.target.value)}
+          value={value}
+        />
+      </label>
+    );
+  }
+
+  return (
+    <label className="grid gap-2">
+      <span className="text-sm font-medium text-foreground">{label}</span>
+      <Input id={editorId} onChange={(event) => onChange(event.target.value)} value={value} />
+    </label>
+  );
+}
+
 export function ProductProfilePage({
   currentProduct,
+  defaultValues,
   draft,
   entries,
   exportError,
@@ -73,8 +139,10 @@ export function ProductProfilePage({
   loadStatus,
   onAddEntry,
   onClearMessages,
+  onDefaultFieldChange,
   onDeleteEntry,
   onDraftFieldChange,
+  onDraftInventoryFieldChange,
   onExport,
   onImport,
   onOpenProducts,
@@ -87,6 +155,9 @@ export function ProductProfilePage({
   selectedProductId,
 }: ProductProfilePageProps) {
   const { t } = useTranslation();
+  const [fieldQuery, setFieldQuery] = useState('');
+  const [selectedInventoryFieldId, setSelectedInventoryFieldId] = useState('700');
+  const deferredFieldQuery = useDeferredValue(fieldQuery);
 
   if (!currentProduct || products.length === 0) {
     return (
@@ -110,6 +181,20 @@ export function ProductProfilePage({
     );
   }
 
+  const normalizedQuery = deferredFieldQuery.trim().toLowerCase();
+  const inventoryFields = msStoreFieldRegistry.filter((fieldDefinition) => {
+    if (coreFieldIdSet.has(fieldDefinition.id)) {
+      return false;
+    }
+
+    if (!normalizedQuery) {
+      return true;
+    }
+
+    return [fieldDefinition.field, fieldDefinition.id, fieldDefinition.type]
+      .some((value) => value.toLowerCase().includes(normalizedQuery));
+  });
+
   const productOptions = products.map((product) => ({
     value: product.id,
     label: product.name || t('products.untitledProduct'),
@@ -122,8 +207,16 @@ export function ProductProfilePage({
       ? t('msStore.loadFailed')
       : null;
 
+  const currentLocaleLabel = draft?.locale
+    ? getMsStoreLanguageLabel(draft.locale)
+    : t('msStore.inventory.noLocaleSelected');
+
+  const selectedInventoryField = inventoryFields.find((fieldDefinition) => fieldDefinition.id === selectedInventoryFieldId)
+    ?? inventoryFields[0]
+    ?? null;
+
   return (
-    <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(26rem,0.9fr)]">
+    <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(28rem,1.05fr)]">
       <Card className="min-h-0 overflow-hidden">
         <CardHeader className="border-b border-border/80 pb-3">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
@@ -188,11 +281,11 @@ export function ProductProfilePage({
             </div>
           </div>
 
-          {loadError ? <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{loadError}</div> : null}
+          {loadError ? <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{translateMaybe(t, loadError)}</div> : null}
           {importError ? (
             <div className="grid gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
               <div className="flex items-center justify-between gap-3">
-                <span>{importError}</span>
+                <span>{translateMaybe(t, importError)}</span>
                 <Button onClick={onClearMessages} size="sm" type="button" variant="ghost">{t('msStore.dismissStatus')}</Button>
               </div>
               {importErrors.length > 0 ? (
@@ -206,7 +299,7 @@ export function ProductProfilePage({
           ) : null}
           {exportError ? (
             <div className="flex items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              <span>{exportError}</span>
+              <span>{translateMaybe(t, exportError)}</span>
               <Button onClick={onClearMessages} size="sm" type="button" variant="ghost">{t('msStore.dismissStatus')}</Button>
             </div>
           ) : null}
@@ -243,7 +336,7 @@ export function ProductProfilePage({
                     >
                       <td className="px-4 py-3 font-medium text-foreground">{entry.locale ? getMsStoreLanguageLabel(entry.locale) : '-'}</td>
                       <td className="px-4 py-3 text-muted-foreground">{entry.market || '-'}</td>
-                      <td className="px-4 py-3 text-foreground">{entry.title || t('msStore.untitledEntry')}</td>
+                      <td className="px-4 py-3 text-foreground">{getMsStoreEntryCoreFieldValue(entry, 'title') || t('msStore.untitledEntry')}</td>
                       <td className="px-4 py-3 font-mono text-[13px] text-muted-foreground">{entry.storeId || '-'}</td>
                       <td className="px-4 py-3 text-right font-mono text-[13px] text-muted-foreground">{entry.updatedAt}</td>
                     </tr>
@@ -261,7 +354,7 @@ export function ProductProfilePage({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="min-h-0 overflow-hidden">
         <CardHeader className="border-b border-border/80 pb-3">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -273,7 +366,7 @@ export function ProductProfilePage({
             </Badge>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-4 pt-4">
+        <CardContent className="grid min-h-0 gap-4 overflow-auto pt-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="grid gap-2">
               <span className="text-sm font-medium text-foreground">{t('msStore.form.localeLabel')}</span>
@@ -316,53 +409,75 @@ export function ProductProfilePage({
             {fieldErrors.storeId ? <span className="text-sm text-destructive">{t(fieldErrors.storeId)}</span> : null}
           </label>
 
-          <label className="grid gap-2">
-            <span className="text-sm font-medium text-foreground">{t('msStore.form.titleLabel')}</span>
-            <Input
-              aria-label={t('msStore.form.titleLabel')}
-              aria-invalid={fieldErrors.title ? 'true' : 'false'}
-              onChange={(event) => onDraftFieldChange('title', event.target.value)}
-              placeholder={t('msStore.form.titlePlaceholder')}
-              value={draft?.title ?? ''}
-            />
-            {fieldErrors.title ? <span className="text-sm text-destructive">{t(fieldErrors.title)}</span> : null}
-          </label>
+          <div className="rounded-2xl border border-border/70 bg-[color:var(--surface-panel-muted)] p-4">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('msStore.coreFieldsLabel')}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{t('msStore.coreFieldsDescription', { locale: currentLocaleLabel })}</p>
+              </div>
+              <Badge variant="secondary">{currentLocaleLabel}</Badge>
+            </div>
 
-          <label className="grid gap-2">
-            <span className="text-sm font-medium text-foreground">{t('msStore.form.subtitleLabel')}</span>
-            <Input
-              aria-label={t('msStore.form.subtitleLabel')}
-              onChange={(event) => onDraftFieldChange('subtitle', event.target.value)}
-              placeholder={t('msStore.form.subtitlePlaceholder')}
-              value={draft?.subtitle ?? ''}
-            />
-          </label>
+            <div className="grid gap-4">
+              {[
+                {
+                  error: fieldErrors.title,
+                  fieldId: msStoreCoreFieldIds.title,
+                  key: 'title' as const,
+                  label: t('msStore.form.titleLabel'),
+                },
+                {
+                  error: undefined,
+                  fieldId: msStoreCoreFieldIds.subtitle,
+                  key: 'subtitle' as const,
+                  label: t('msStore.form.subtitleLabel'),
+                },
+                {
+                  error: fieldErrors.shortDescription,
+                  fieldId: msStoreCoreFieldIds.shortDescription,
+                  key: 'shortDescription' as const,
+                  label: t('msStore.form.shortDescriptionLabel'),
+                },
+                {
+                  error: fieldErrors.description,
+                  fieldId: msStoreCoreFieldIds.description,
+                  key: 'description' as const,
+                  label: t('msStore.form.descriptionLabel'),
+                },
+              ].map((coreField) => {
+                const fieldDefinition = msStoreFieldRegistry.find((candidate) => candidate.id === coreField.fieldId);
 
-          <label className="grid gap-2">
-            <span className="text-sm font-medium text-foreground">{t('msStore.form.shortDescriptionLabel')}</span>
-            <textarea
-              aria-label={t('msStore.form.shortDescriptionLabel')}
-              aria-invalid={fieldErrors.shortDescription ? 'true' : 'false'}
-              className="min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15"
-              onChange={(event) => onDraftFieldChange('shortDescription', event.target.value)}
-              placeholder={t('msStore.form.shortDescriptionPlaceholder')}
-              value={draft?.shortDescription ?? ''}
-            />
-            {fieldErrors.shortDescription ? <span className="text-sm text-destructive">{t(fieldErrors.shortDescription)}</span> : null}
-          </label>
+                if (!fieldDefinition) {
+                  return null;
+                }
 
-          <label className="grid gap-2">
-            <span className="text-sm font-medium text-foreground">{t('msStore.form.descriptionLabel')}</span>
-            <textarea
-              aria-label={t('msStore.form.descriptionLabel')}
-              aria-invalid={fieldErrors.description ? 'true' : 'false'}
-              className="min-h-36 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15"
-              onChange={(event) => onDraftFieldChange('description', event.target.value)}
-              placeholder={t('msStore.form.descriptionPlaceholder')}
-              value={draft?.description ?? ''}
-            />
-            {fieldErrors.description ? <span className="text-sm text-destructive">{t(fieldErrors.description)}</span> : null}
-          </label>
+                return (
+                  <div className="grid gap-3 rounded-xl border border-border/70 bg-background p-4" key={coreField.fieldId}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-sm font-semibold text-foreground">{coreField.label}</h3>
+                      <Badge variant="outline">{fieldDefinition.field}</Badge>
+                      <Badge variant="outline">ID {fieldDefinition.id}</Badge>
+                    </div>
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      <ValueEditor
+                        fieldDefinition={fieldDefinition}
+                        label={`${coreField.label} (${t('msStore.defaultColumnLabel')})`}
+                        onChange={(value) => onDefaultFieldChange(coreField.fieldId, value)}
+                        value={defaultValues[coreField.fieldId] ?? ''}
+                      />
+                      <ValueEditor
+                        fieldDefinition={fieldDefinition}
+                        label={coreField.label}
+                        onChange={(value) => onDraftFieldChange(coreField.key, value)}
+                        value={draft?.[coreField.key] ?? ''}
+                      />
+                    </div>
+                    {coreField.error ? <span className="text-sm text-destructive">{t(coreField.error)}</span> : null}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
           <label className="grid gap-2">
             <span className="text-sm font-medium text-foreground">{t('msStore.form.keywordsLabel')}</span>
@@ -376,6 +491,86 @@ export function ProductProfilePage({
             <p className="text-xs text-muted-foreground">{t('msStore.form.keywordsHint')}</p>
             {fieldErrors.keywords ? <span className="text-sm text-destructive">{t(fieldErrors.keywords)}</span> : null}
           </label>
+
+          <div className="rounded-2xl border border-border/70 bg-[color:var(--surface-panel-muted)] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('msStore.inventory.title')}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{t('msStore.inventory.description', { locale: currentLocaleLabel })}</p>
+              </div>
+              <Badge variant="secondary">{t('msStore.inventory.countLabel', { count: inventoryFields.length })}</Badge>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              <label className="grid gap-2">
+                <span className="text-sm font-medium text-foreground">{t('msStore.inventory.searchLabel')}</span>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="pl-10"
+                    onChange={(event) => setFieldQuery(event.target.value)}
+                    placeholder={t('msStore.inventory.searchPlaceholder')}
+                    value={fieldQuery}
+                  />
+                </div>
+              </label>
+
+              <div className="grid gap-3">
+                {inventoryFields.length > 0 && selectedInventoryField ? (
+                  <div className="grid gap-3 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+                    <div className="max-h-[26rem] overflow-auto rounded-xl border border-border/70 bg-background p-2">
+                      <div className="grid gap-1">
+                        {inventoryFields.map((fieldDefinition) => {
+                          const isSelected = fieldDefinition.id === selectedInventoryField.id;
+
+                          return (
+                            <button
+                              className={cn(
+                                'grid gap-1 rounded-lg px-3 py-2 text-left transition-colors hover:bg-accent/55',
+                                isSelected && 'bg-primary/10',
+                              )}
+                              key={fieldDefinition.id}
+                              onClick={() => setSelectedInventoryFieldId(fieldDefinition.id)}
+                              type="button"
+                            >
+                              <span className="text-sm font-medium text-foreground">{fieldDefinition.field}</span>
+                              <span className="text-xs text-muted-foreground">ID {fieldDefinition.id} · {fieldDefinition.type}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 rounded-xl border border-border/70 bg-background p-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-sm font-semibold text-foreground">{selectedInventoryField.field}</h3>
+                        <Badge variant="outline">ID {selectedInventoryField.id}</Badge>
+                        <Badge variant="outline">{selectedInventoryField.type}</Badge>
+                      </div>
+                      <div className="grid gap-3 lg:grid-cols-2">
+                        <ValueEditor
+                          fieldDefinition={selectedInventoryField}
+                          label={`${selectedInventoryField.field} (${t('msStore.defaultColumnLabel')})`}
+                          onChange={(value) => onDefaultFieldChange(selectedInventoryField.id, value)}
+                          value={defaultValues[selectedInventoryField.id] ?? ''}
+                        />
+                        <ValueEditor
+                          fieldDefinition={selectedInventoryField}
+                          label={`${selectedInventoryField.field} (${currentLocaleLabel})`}
+                          onChange={(value) => onDraftInventoryFieldChange(selectedInventoryField.id, value)}
+                          value={draft?.fieldValues[selectedInventoryField.id] ?? ''}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-border bg-background px-4 py-6 text-sm text-muted-foreground">
+                    {t('msStore.inventory.empty')}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
 
           <div className="flex flex-wrap justify-end gap-3 border-t border-border/70 pt-4">
             <Button onClick={onDeleteEntry} type="button" variant="outline">
