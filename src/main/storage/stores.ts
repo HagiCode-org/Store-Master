@@ -142,7 +142,7 @@ export async function importProductMsStoreDataFromFile(productStorageId: string,
 export async function exportProductMsStoreDataToFile(filePath: string, dataset: MsStoreDataDataset): Promise<MsStoreDataExportResult> {
   const normalizedDataset = normalizeMsStoreDataDataset(dataset, dataset.productStorageId);
 
-  if (!normalizedDataset || !isMsStoreDataDataset(normalizedDataset)) {
+  if (!normalizedDataset) {
     return {
       success: false,
       entryCount: dataset.entries.length,

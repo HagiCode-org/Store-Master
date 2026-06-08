@@ -1,8 +1,9 @@
 import { useDeferredValue, useEffect, useState } from 'react';
-import { Boxes, FileStack, Settings2 } from 'lucide-react';
+import { Boxes, FileStack, Languages, Settings2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { AppHeader } from '@/components/navigation/AppHeader';
 import { PrimarySidebar } from '@/components/navigation/PrimarySidebar';
+import { LanguagesPage } from '@/components/products/LanguagesPage';
 import { ProductProfilePage } from '@/components/products/ProductProfilePage';
 import { ProductsPage } from '@/components/products/ProductsPage';
 import { SettingsPage } from '@/components/settings/SettingsPage';
@@ -19,12 +20,13 @@ import {
   deleteSelectedMsStoreEntry,
   exportMsStoreData,
   importMsStoreData,
-  replaceMsStoreDraft,
   resetMsStoreDraft,
   saveMsStoreDraft,
   selectMsStoreEntry,
+  startNewMsStoreEntry,
   updateMsStoreDefaultFieldValue,
-  type MsStoreDataDraft,
+  updateMsStoreDraftField,
+  updateMsStoreDraftInventoryField,
 } from '@/store/slices/msStoreDataSlice';
 import {
   createProduct,
@@ -106,6 +108,7 @@ export default function App() {
 
   const navigationItems = [
     { id: 'products' as const, icon: Boxes, label: t('navigation.products') },
+    { id: 'languages' as const, icon: Languages, label: t('navigation.languages') },
     { id: 'product-profile' as const, icon: FileStack, label: t('navigation.productProfile') },
     { id: 'settings' as const, icon: Settings2, label: t('navigation.settings') },
   ];
@@ -161,7 +164,8 @@ export default function App() {
         loadStatus={msStoreLoadStatus}
         onClearMessages={() => dispatch(clearMsStoreMessages())}
         onDefaultFieldChange={(fieldId, value) => dispatch(updateMsStoreDefaultFieldValue({ fieldId, value }))}
-        onDeleteEntry={() => dispatch(deleteSelectedMsStoreEntry())}
+        onDraftFieldChange={(field, value) => dispatch(updateMsStoreDraftField({ field, value }))}
+        onDraftInventoryFieldChange={(fieldId, value) => dispatch(updateMsStoreDraftInventoryField({ fieldId, value }))}
         onExport={() => {
           if (!currentProduct) {
             return;
@@ -186,11 +190,48 @@ export default function App() {
         }}
         onOpenProducts={() => dispatch(setActiveSection('products'))}
         onResetDraft={() => dispatch(resetMsStoreDraft())}
-        onSaveDraft={(nextDraft: MsStoreDataDraft) => {
-          dispatch(replaceMsStoreDraft(nextDraft));
-          dispatch(saveMsStoreDraft());
-        }}
+        onSaveDraft={() => dispatch(saveMsStoreDraft())}
         onSelectEntry={(entryId) => dispatch(selectMsStoreEntry(entryId))}
+        onSelectProduct={(productId) => dispatch(selectProduct(productId))}
+        products={products}
+        selectedProductId={selectedProductId}
+      />
+    );
+  }
+
+  if (activeSection === 'languages') {
+    content = (
+      <LanguagesPage
+        currentProduct={currentProduct}
+        draft={msStoreDraft}
+        entries={msStoreEntries}
+        loadError={msStoreLoadError}
+        loadStatus={msStoreLoadStatus}
+        onCreateLanguage={(locale) => {
+          const normalizedLocale = locale.trim();
+
+          if (!normalizedLocale) {
+            return;
+          }
+
+          if (msStoreDraft?.locale.trim() === normalizedLocale && (!msStoreDraft.id || !msStoreEntries.some((entry) => entry.id === msStoreDraft.id))) {
+            dispatch(setActiveSection('product-profile'));
+            return;
+          }
+
+          dispatch(startNewMsStoreEntry());
+          dispatch(updateMsStoreDraftField({ field: 'locale', value: normalizedLocale }));
+          dispatch(setActiveSection('product-profile'));
+        }}
+        onDeleteEntry={(entryId) => {
+          dispatch(selectMsStoreEntry(entryId));
+          dispatch(deleteSelectedMsStoreEntry());
+        }}
+        onEditEntry={(entryId) => {
+          dispatch(selectMsStoreEntry(entryId));
+          dispatch(setActiveSection('product-profile'));
+        }}
+        onOpenProducts={() => dispatch(setActiveSection('products'))}
         onSelectProduct={(productId) => dispatch(selectProduct(productId))}
         products={products}
         selectedProductId={selectedProductId}

@@ -305,8 +305,6 @@ describe('product-scoped storage helpers', () => {
           id: 'ms-1',
           productStorageId,
           locale: 'en-US',
-          market: 'US',
-          storeId: '9NTEST123',
           keywords: ['desktop', 'release'],
           fieldValues: {
             [msStoreCoreFieldIds.title]: 'Signal Desk Deluxe',
@@ -322,8 +320,6 @@ describe('product-scoped storage helpers', () => {
           id: 'ms-2',
           productStorageId,
           locale: 'zh-CN',
-          market: 'CN',
-          storeId: '9NTEST456',
           keywords: ['桌面', '发行'],
           fieldValues: {
             [msStoreCoreFieldIds.title]: '信号桌面',
@@ -379,7 +375,6 @@ describe('product-scoped storage helpers', () => {
           id: 'ms-1',
           productStorageId,
           locale: 'en-US',
-          market: 'US',
           storeId: '9NTEST123',
           title: 'Signal Desk Deluxe',
           subtitle: 'Operator-ready',
@@ -400,8 +395,6 @@ describe('product-scoped storage helpers', () => {
       defaultValues: {},
       entries: [expect.objectContaining({
         locale: 'en-US',
-        market: 'US',
-        storeId: '9NTEST123',
         fieldValues: {
           [msStoreCoreFieldIds.title]: 'Signal Desk Deluxe',
           [msStoreCoreFieldIds.subtitle]: 'Operator-ready',
@@ -442,8 +435,6 @@ describe('product-scoped storage helpers', () => {
         entries: [
           expect.objectContaining({
             locale: 'en-US',
-            market: 'US',
-            storeId: '9NTEST123',
             keywords: ['desktop', 'release'],
             fieldValues: expect.objectContaining({
               [msStoreCoreFieldIds.title]: 'Signal Desk Deluxe',
@@ -453,8 +444,6 @@ describe('product-scoped storage helpers', () => {
           }),
           expect.objectContaining({
             locale: 'zh-CN',
-            market: 'CN',
-            storeId: '9NTEST456',
             keywords: ['桌面', '发行'],
             fieldValues: expect.objectContaining({
               [msStoreCoreFieldIds.title]: '信号桌面',
@@ -529,8 +518,6 @@ describe('product-scoped storage helpers', () => {
     dataset.entries.push({
       ...dataset.entries[0],
       id: 'ms-3',
-      market: 'GB',
-      storeId: '9NTEST999',
     });
 
     const exportPath = path.join(tmpDir, 'ambiguous-export.csv');

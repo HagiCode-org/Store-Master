@@ -80,15 +80,11 @@ describe('Store Master app shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save record' }));
 
     expect(screen.getByText('Locale is required.')).toBeInTheDocument();
-    expect(screen.getByText('Market is required.')).toBeInTheDocument();
-    expect(screen.getByText('Store ID is required.')).toBeInTheDocument();
     expect(screen.getByText('Title is required.')).toBeInTheDocument();
     expect(screen.getByText('Short description is required.')).toBeInTheDocument();
     expect(screen.getByText('Description is required.')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Locale'), { target: { value: 'en-US' } });
-    fireEvent.change(screen.getByLabelText('Market'), { target: { value: 'US' } });
-    fireEvent.change(screen.getByLabelText('Store ID'), { target: { value: '9NTEST123' } });
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Signal Desk Deluxe' } });
     fireEvent.change(screen.getByLabelText('Short description'), { target: { value: 'Localized Store summary.' } });
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Desktop release workspace for operators.' } });
@@ -108,8 +104,6 @@ describe('Store Master app shell', () => {
         defaultValues: {},
         entries: [expect.objectContaining({
           locale: 'en-US',
-          market: 'US',
-          storeId: '9NTEST123',
           fieldValues: expect.objectContaining({
             '4': 'Signal Desk Deluxe',
             '8': 'Localized Store summary.',
@@ -130,8 +124,6 @@ describe('Store Master app shell', () => {
       expect(screen.queryByText('Loading MS Store data...')).not.toBeInTheDocument();
     });
     fireEvent.change(screen.getByLabelText('Locale'), { target: { value: 'en-US' } });
-    fireEvent.change(screen.getByLabelText('Market'), { target: { value: 'US' } });
-    fireEvent.change(screen.getByLabelText('Store ID'), { target: { value: '9NKEEP123' } });
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Keep Me' } });
     fireEvent.change(screen.getByLabelText('Short description'), { target: { value: 'Existing summary should remain.' } });
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Existing record should remain.' } });
@@ -167,8 +159,6 @@ describe('Store Master app shell', () => {
           id: 'ms-existing',
           productStorageId: 'prd-11111111-1111-4111-8111-111111111111',
           locale: 'en-US',
-          market: 'US',
-          storeId: '9NEXIST123',
           keywords: ['desk'],
           fieldValues: {
             '4': 'Existing Title',
@@ -183,15 +173,16 @@ describe('Store Master app shell', () => {
 
     await renderApp();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Product Data' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Languages' }));
     await waitFor(() => {
-      expect(screen.queryByText('Loading MS Store data...')).not.toBeInTheDocument();
+      expect(screen.getByText('Language management')).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Add language' }));
+    await waitFor(() => {
+      expect(screen.getByText('MS Store data maintenance')).toBeInTheDocument();
+    });
     fireEvent.change(screen.getByLabelText('Locale'), { target: { value: 'ja-JP' } });
-    fireEvent.change(screen.getByLabelText('Market'), { target: { value: 'JP' } });
-    fireEvent.change(screen.getByLabelText('Store ID'), { target: { value: '9NNEW1234' } });
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Japan Title' } });
     fireEvent.change(screen.getByLabelText('Short description'), { target: { value: 'Japan summary.' } });
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Japan description.' } });
@@ -203,10 +194,52 @@ describe('Store Master app shell', () => {
     });
 
     expect(screen.queryByText('Locale is required.')).not.toBeInTheDocument();
-    expect(screen.queryByText('Market is required.')).not.toBeInTheDocument();
-    expect(screen.queryByText('Store ID is required.')).not.toBeInTheDocument();
     expect(screen.queryByText('Title is required.')).not.toBeInTheDocument();
     expect(screen.queryByText('Short description is required.')).not.toBeInTheDocument();
     expect(screen.queryByText('Description is required.')).not.toBeInTheDocument();
+  });
+
+  it('deletes a locale record from the Languages page', async () => {
+    vi.mocked(window.storeMaster.readMsStoreData).mockResolvedValueOnce({
+      productStorageId: 'prd-11111111-1111-4111-8111-111111111111',
+      version: 2,
+      defaultValues: {},
+      entries: [
+        {
+          id: 'ms-existing',
+          productStorageId: 'prd-11111111-1111-4111-8111-111111111111',
+          locale: 'en-US',
+          keywords: ['desk'],
+          fieldValues: {
+            '4': 'Existing Title',
+            '8': 'Existing summary',
+            '2': 'Existing description',
+          },
+          createdAt: '2026-06-08 10:00',
+          updatedAt: '2026-06-08 10:00',
+        },
+      ],
+    });
+
+    await renderApp();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Languages' }));
+    await waitFor(() => {
+      expect(screen.getByText('Language management')).toBeInTheDocument();
+      expect(screen.getByText('English (United States)')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(window.storeMaster.writeMsStoreData).toHaveBeenCalledWith(
+        'prd-11111111-1111-4111-8111-111111111111',
+        expect.objectContaining({
+          entries: [],
+        }),
+      );
+    });
+
+    expect(screen.getByText('No locale records exist for the active product yet.')).toBeInTheDocument();
   });
 });

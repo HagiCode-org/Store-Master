@@ -1,4 +1,4 @@
-import { memo, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { memo, useDeferredValue, useMemo, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
@@ -12,7 +12,6 @@ import {
   RotateCcw,
   Save,
   Search,
-  Trash2,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/badge';
@@ -20,12 +19,18 @@ import { Button } from '@/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/card';
 import { Input } from '@/components/input';
 import { SearchableSelect } from '@/components/searchable-select';
+import {
+  buildLocaleGroups,
+  createDraftLocaleGroup,
+  getEntryMissingRequiredCount,
+  normalizeLocaleKey,
+  sortLocaleValues,
+  type LocaleGroupStatus,
+} from '@/lib/msStoreLanguages';
 import { cn } from '@/lib/utils';
 import {
-  createEmptyMsStoreDataEntry,
   type MsStoreDataImportError,
   type MsStoreDataValidationErrors,
-  getMsStoreEntryCoreFieldValue,
   getMsStoreLanguageLabel,
   isBooleanMsStoreField,
   isLongTextMsStoreField,
@@ -54,12 +59,13 @@ interface ProductProfilePageProps {
   loadStatus: 'idle' | 'loading' | 'succeeded' | 'failed';
   onClearMessages: () => void;
   onDefaultFieldChange: (fieldId: string, value: string) => void;
-  onDeleteEntry: () => void;
+  onDraftFieldChange: (field: EditableDraftFieldKey, value: string) => void;
+  onDraftInventoryFieldChange: (fieldId: string, value: string) => void;
   onExport: () => void;
   onImport: () => void;
   onOpenProducts: () => void;
   onResetDraft: () => void;
-  onSaveDraft: (draft: MsStoreDataDraft) => void;
+  onSaveDraft: () => void;
   onSelectEntry: (entryId: string) => void;
   onSelectProduct: (productId: string) => void;
   products: ProductRecord[];
@@ -67,20 +73,8 @@ interface ProductProfilePageProps {
 }
 
 type InventoryFilter = 'all' | 'empty' | 'changed' | 'assets' | 'longText';
-type LocaleGroupStatus = 'ready' | 'needsReview' | 'new';
 type CoreDraftFieldKey = 'title' | 'subtitle' | 'shortDescription' | 'description';
-type EditableDraftFieldKey = keyof Pick<MsStoreDataDraft, 'locale' | 'market' | 'storeId' | 'title' | 'subtitle' | 'shortDescription' | 'description' | 'keywordsText'>;
-
-interface LocaleGroup {
-  entries: MsStoreDataEntry[];
-  key: string;
-  latestUpdatedAt: string;
-  locale: string;
-  marketCount: number;
-  missingRequiredCount: number;
-  previewTitle: string;
-  status: LocaleGroupStatus;
-}
+type EditableDraftFieldKey = keyof Pick<MsStoreDataDraft, 'locale' | 'title' | 'subtitle' | 'shortDescription' | 'description' | 'keywordsText'>;
 
 const coreFieldIdSet = new Set(Object.values(msStoreCoreFieldIds));
 const requiredFieldIds = [
@@ -88,29 +82,6 @@ const requiredFieldIds = [
   msStoreCoreFieldIds.shortDescription,
   msStoreCoreFieldIds.description,
 ] as const;
-
-function normalizeLocaleKey(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function normalizeMarketKey(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function sortLocaleValues(values: string[]): string[] {
-  return [...values].sort((left, right) => {
-    const leftIndex = supportedMsStoreLanguages.findIndex((language) => normalizeLocaleKey(language) === normalizeLocaleKey(left));
-    const rightIndex = supportedMsStoreLanguages.findIndex((language) => normalizeLocaleKey(language) === normalizeLocaleKey(right));
-
-    if (leftIndex !== -1 || rightIndex !== -1) {
-      if (leftIndex === -1) return 1;
-      if (rightIndex === -1) return -1;
-      return leftIndex - rightIndex;
-    }
-
-    return left.localeCompare(right);
-  });
-}
 
 function translateMaybe(t: ReturnType<typeof useTranslation>['t'], value: string): string {
   const translated = t(value);
@@ -125,137 +96,6 @@ function renderImportErrorLabel(t: ReturnType<typeof useTranslation>['t'], error
   return `${t('msStore.importErrorPrefix', { index: error.index + 1 })}: ${t(error.messageKey)}`;
 }
 
-function getEntryMissingRequiredCount(entry: MsStoreDataEntry): number {
-  let missingCount = entry.storeId.trim().length === 0 ? 1 : 0;
-
-  requiredFieldIds.forEach((fieldId) => {
-    if ((entry.fieldValues[fieldId] ?? '').trim().length === 0) {
-      missingCount += 1;
-    }
-  });
-
-  return missingCount;
-}
-
-function buildLocaleGroups(entries: MsStoreDataEntry[], untitledEntryLabel: string): LocaleGroup[] {
-  const groupedEntries = new Map<string, MsStoreDataEntry[]>();
-
-  entries.forEach((entry) => {
-    const key = normalizeLocaleKey(entry.locale);
-    const group = groupedEntries.get(key) ?? [];
-    group.push(entry);
-    groupedEntries.set(key, group);
-  });
-
-  return sortLocaleValues(Array.from(groupedEntries.values()).map((group) => group[0]?.locale ?? '')).map((locale) => {
-    const key = normalizeLocaleKey(locale);
-    const localeEntries = (groupedEntries.get(key) ?? []).slice().sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-    const latestEntry = localeEntries[0] ?? null;
-    const previewTitle = localeEntries
-      .map((entry) => getMsStoreEntryCoreFieldValue(entry, 'title').trim())
-      .find((title) => title.length > 0) ?? untitledEntryLabel;
-    const missingRequiredCount = localeEntries.reduce((count, entry) => count + (getEntryMissingRequiredCount(entry) > 0 ? 1 : 0), 0);
-    const uniqueMarkets = new Set(localeEntries.map((entry) => entry.market.trim()).filter(Boolean));
-
-    return {
-      entries: localeEntries,
-      key,
-      latestUpdatedAt: latestEntry?.updatedAt ?? '-',
-      locale,
-      marketCount: uniqueMarkets.size,
-      missingRequiredCount,
-      previewTitle,
-      status: missingRequiredCount > 0 ? 'needsReview' : 'ready',
-    } satisfies LocaleGroup;
-  });
-}
-
-function createDraftLocaleGroup(locale: string, previewTitle: string): LocaleGroup {
-  return {
-    entries: [],
-    key: normalizeLocaleKey(locale),
-    latestUpdatedAt: '-',
-    locale,
-    marketCount: 0,
-    missingRequiredCount: 0,
-    previewTitle,
-    status: 'new',
-  };
-}
-
-function cloneMsStoreDraft(draft: MsStoreDataDraft | null): MsStoreDataDraft | null {
-  if (!draft) {
-    return null;
-  }
-
-  return {
-    ...draft,
-    fieldValues: { ...draft.fieldValues },
-  };
-}
-
-function createDraftFromEntry(entry: MsStoreDataEntry): MsStoreDataDraft {
-  return {
-    ...entry,
-    title: getMsStoreEntryCoreFieldValue(entry, 'title'),
-    subtitle: getMsStoreEntryCoreFieldValue(entry, 'subtitle'),
-    shortDescription: getMsStoreEntryCoreFieldValue(entry, 'shortDescription'),
-    description: getMsStoreEntryCoreFieldValue(entry, 'description'),
-    fieldValues: { ...entry.fieldValues },
-    keywordsText: entry.keywords.join(', '),
-  };
-}
-
-function createEmptyDraft(productStorageId: string): MsStoreDataDraft {
-  return createDraftFromEntry(createEmptyMsStoreDataEntry(productStorageId));
-}
-
-function syncDraftFieldValue(fieldValues: Record<string, string>, fieldId: string, value: string): Record<string, string> {
-  const nextFieldValues = { ...fieldValues };
-
-  if (value.length === 0) {
-    delete nextFieldValues[fieldId];
-  } else {
-    nextFieldValues[fieldId] = value;
-  }
-
-  return nextFieldValues;
-}
-
-function areDraftFieldValuesEqual(left: Record<string, string>, right: Record<string, string>): boolean {
-  const leftKeys = Object.keys(left);
-  const rightKeys = Object.keys(right);
-
-  if (leftKeys.length !== rightKeys.length) {
-    return false;
-  }
-
-  return leftKeys.every((key) => left[key] === right[key]);
-}
-
-function areDraftsEqual(left: MsStoreDataDraft | null, right: MsStoreDataDraft | null): boolean {
-  if (left === right) {
-    return true;
-  }
-
-  if (!left || !right) {
-    return false;
-  }
-
-  return left.id === right.id
-    && left.productStorageId === right.productStorageId
-    && left.locale === right.locale
-    && left.market === right.market
-    && left.storeId === right.storeId
-    && left.title === right.title
-    && left.subtitle === right.subtitle
-    && left.shortDescription === right.shortDescription
-    && left.description === right.description
-    && left.keywordsText === right.keywordsText
-    && left.createdAt === right.createdAt
-    && left.updatedAt === right.updatedAt
-    && areDraftFieldValuesEqual(left.fieldValues, right.fieldValues);
-}
 
 function isAssetMsStoreField(fieldDefinition: MsStoreFieldDefinition): boolean {
   return /screenshot|icon|logo|trailer|hero|image/i.test(fieldDefinition.field);
@@ -479,7 +319,8 @@ export function ProductProfilePage({
   loadStatus,
   onClearMessages,
   onDefaultFieldChange,
-  onDeleteEntry,
+  onDraftFieldChange,
+  onDraftInventoryFieldChange,
   onExport,
   onImport,
   onOpenProducts,
@@ -493,13 +334,100 @@ export function ProductProfilePage({
   const { t } = useTranslation();
   const [fieldQuery, setFieldQuery] = useState('');
   const [inventoryFilter, setInventoryFilter] = useState<InventoryFilter>('all');
-  // Keep high-frequency field edits local, then commit once on save.
-  const [editorDraft, setEditorDraft] = useState<MsStoreDataDraft | null>(() => cloneMsStoreDraft(draft));
   const deferredFieldQuery = useDeferredValue(fieldQuery);
 
-  useEffect(() => {
-    setEditorDraft(cloneMsStoreDraft(draft));
-  }, [draft]);
+  const productOptions = useMemo(() => products.map((product) => ({
+    value: product.id,
+    label: product.name || t('products.untitledProduct'),
+    description: product.folderName || t('sidebar.folderFallback'),
+  })), [products, t]);
+
+  const persistedEntryIds = useMemo(() => new Set(entries.map((entry) => entry.id)), [entries]);
+  const activeSelectedEntryId = draft && persistedEntryIds.has(draft.id) ? draft.id : '';
+  const localeGroups = useMemo(() => buildLocaleGroups(entries, t('msStore.untitledEntry')), [entries, t]);
+  const draftLocale = draft?.locale.trim() ?? '';
+  const draftLocaleKey = normalizeLocaleKey(draftLocale);
+  const hasDraftLocaleGroup = draftLocaleKey.length > 0 && localeGroups.some((group) => group.key === draftLocaleKey);
+  const visibleLocaleGroups = useMemo(() => (hasDraftLocaleGroup || draftLocale.length === 0
+    ? localeGroups
+    : sortLocaleValues([...localeGroups.map((group) => group.locale), draftLocale]).map((locale) => (
+        localeGroups.find((group) => group.key === normalizeLocaleKey(locale))
+        ?? createDraftLocaleGroup(locale, t('msStore.untitledEntry'))
+      ))), [draftLocale, hasDraftLocaleGroup, localeGroups, t]);
+  const activeLocale = draftLocale || (activeSelectedEntryId ? visibleLocaleGroups[0]?.locale ?? '' : '');
+  const activeLocaleKey = normalizeLocaleKey(activeLocale);
+  const activeLocaleGroup = visibleLocaleGroups.find((group) => group.key === activeLocaleKey) ?? null;
+  const currentLocaleLabel = activeLocale ? getMsStoreLanguageLabel(activeLocale) : t('msStore.inventory.noLocaleSelected');
+  const localeEntries = activeLocaleGroup?.entries ?? [];
+  const localeRecordCount = localeEntries.length;
+  const activeEntry = localeEntries.find((entry) => entry.id === activeSelectedEntryId)
+    ?? localeEntries[0]
+    ?? null;
+  const requiredFilledCount = requiredFieldIds
+    .map((fieldId) => ((draft?.fieldValues[fieldId] ?? '').trim().length > 0 ? fieldId : null))
+    .filter(Boolean).length;
+  const localeOnlyCount = Object.entries(draft?.fieldValues ?? {}).filter(([fieldId, value]) => value.trim().length > 0 && (defaultValues[fieldId] ?? '').trim().length === 0).length;
+  const changedCount = Object.entries(draft?.fieldValues ?? {}).filter(([fieldId, value]) => value.trim().length > 0 && value.trim() !== (defaultValues[fieldId] ?? '').trim()).length;
+
+  const normalizedQuery = deferredFieldQuery.trim().toLowerCase();
+  const inventoryFields = useMemo(() => msStoreFieldRegistry.filter((fieldDefinition) => {
+    if (coreFieldIdSet.has(fieldDefinition.id)) {
+      return false;
+    }
+
+    if (normalizedQuery.length > 0 && ![fieldDefinition.field, fieldDefinition.id, fieldDefinition.type].some((value) => value.toLowerCase().includes(normalizedQuery))) {
+      return false;
+    }
+
+    if (inventoryFilter === 'empty') {
+      return getInventoryFieldState(fieldDefinition, draft, defaultValues) === 'empty';
+    }
+
+    if (inventoryFilter === 'changed') {
+      return getInventoryFieldState(fieldDefinition, draft, defaultValues) === 'changed';
+    }
+
+    if (inventoryFilter === 'assets') {
+      return isAssetMsStoreField(fieldDefinition);
+    }
+
+    if (inventoryFilter === 'longText') {
+      return isLongTextMsStoreField(fieldDefinition);
+    }
+
+    return true;
+  }), [defaultValues, draft, inventoryFilter, normalizedQuery]);
+
+  const statusBadge = loadStatus === 'loading'
+    ? t('msStore.loading')
+    : loadStatus === 'failed'
+      ? t('msStore.loadFailed')
+      : null;
+
+  const localeOptions = useMemo(() => supportedMsStoreLanguages.map((locale) => ({
+    value: locale,
+    label: getMsStoreLanguageLabel(locale),
+  })), []);
+
+  const inventoryFilters: Array<{ id: InventoryFilter; label: string }> = [
+    { id: 'all', label: t('msStore.inventory.filters.all') },
+    { id: 'empty', label: t('msStore.inventory.filters.empty') },
+    { id: 'changed', label: t('msStore.inventory.filters.changed') },
+    { id: 'assets', label: t('msStore.inventory.filters.assets') },
+    { id: 'longText', label: t('msStore.inventory.filters.longText') },
+  ];
+
+  const handleSelectLocaleGroup = (locale: string) => {
+    const localeKey = normalizeLocaleKey(locale);
+    const group = visibleLocaleGroups.find((candidate) => candidate.key === localeKey);
+
+    if (!group || group.entries.length === 0 || !draft) {
+      return;
+    }
+
+    const preferredEntry = group.entries[0];
+    onSelectEntry(preferredEntry.id);
+  };
 
   if (!currentProduct || products.length === 0) {
     return (
@@ -522,227 +450,6 @@ export function ProductProfilePage({
       </Card>
     );
   }
-
-  const productOptions = useMemo(() => products.map((product) => ({
-    value: product.id,
-    label: product.name || t('products.untitledProduct'),
-    description: product.folderName || t('sidebar.folderFallback'),
-  })), [products, t]);
-
-  const visibleFieldErrors = areDraftsEqual(draft, editorDraft) ? fieldErrors : {};
-  const persistedEntryIds = useMemo(() => new Set(entries.map((entry) => entry.id)), [entries]);
-  const activeSelectedEntryId = editorDraft && persistedEntryIds.has(editorDraft.id) ? editorDraft.id : '';
-  const localeGroups = useMemo(() => buildLocaleGroups(entries, t('msStore.untitledEntry')), [entries, t]);
-  const draftLocale = editorDraft?.locale.trim() ?? '';
-  const draftLocaleKey = normalizeLocaleKey(draftLocale);
-  const hasDraftLocaleGroup = draftLocaleKey.length > 0 && localeGroups.some((group) => group.key === draftLocaleKey);
-  const visibleLocaleGroups = useMemo(() => (hasDraftLocaleGroup || draftLocale.length === 0
-    ? localeGroups
-    : sortLocaleValues([...localeGroups.map((group) => group.locale), draftLocale]).map((locale) => (
-        localeGroups.find((group) => group.key === normalizeLocaleKey(locale))
-        ?? createDraftLocaleGroup(locale, t('msStore.untitledEntry'))
-      ))), [draftLocale, hasDraftLocaleGroup, localeGroups, t]);
-  const activeLocale = draftLocale || (activeSelectedEntryId ? visibleLocaleGroups[0]?.locale ?? '' : '');
-  const activeLocaleKey = normalizeLocaleKey(activeLocale);
-  const activeLocaleGroup = visibleLocaleGroups.find((group) => group.key === activeLocaleKey) ?? null;
-  const currentLocaleLabel = activeLocale ? getMsStoreLanguageLabel(activeLocale) : t('msStore.inventory.noLocaleSelected');
-  const localeEntries = activeLocaleGroup?.entries ?? [];
-  const localeRecordCount = localeEntries.length;
-  const activeEntry = localeEntries.find((entry) => entry.id === activeSelectedEntryId)
-    ?? localeEntries.find((entry) => normalizeMarketKey(entry.market) === normalizeMarketKey(editorDraft?.market ?? ''))
-    ?? localeEntries[0]
-    ?? null;
-  const knownMarkets = useMemo(
-    () => Array.from(new Set(entries.map((entry) => entry.market.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right)),
-    [entries],
-  );
-  const localeMarkets = useMemo(
-    () => Array.from(new Set(localeEntries.map((entry) => entry.market.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right)),
-    [localeEntries],
-  );
-  const marketSuggestions = useMemo(() => Array.from(new Set([...localeMarkets, ...knownMarkets])), [knownMarkets, localeMarkets]);
-  const requiredFilledCount = [
-    editorDraft?.storeId.trim().length ? 'storeId' : null,
-    ...requiredFieldIds.map((fieldId) => ((editorDraft?.fieldValues[fieldId] ?? '').trim().length > 0 ? fieldId : null)),
-  ].filter(Boolean).length;
-  const localeOnlyCount = Object.entries(editorDraft?.fieldValues ?? {}).filter(([fieldId, value]) => value.trim().length > 0 && (defaultValues[fieldId] ?? '').trim().length === 0).length;
-  const changedCount = Object.entries(editorDraft?.fieldValues ?? {}).filter(([fieldId, value]) => value.trim().length > 0 && value.trim() !== (defaultValues[fieldId] ?? '').trim()).length;
-
-  const normalizedQuery = deferredFieldQuery.trim().toLowerCase();
-  const inventoryFields = useMemo(() => msStoreFieldRegistry.filter((fieldDefinition) => {
-    if (coreFieldIdSet.has(fieldDefinition.id)) {
-      return false;
-    }
-
-    if (normalizedQuery.length > 0 && ![fieldDefinition.field, fieldDefinition.id, fieldDefinition.type].some((value) => value.toLowerCase().includes(normalizedQuery))) {
-      return false;
-    }
-
-    if (inventoryFilter === 'empty') {
-      return getInventoryFieldState(fieldDefinition, editorDraft, defaultValues) === 'empty';
-    }
-
-    if (inventoryFilter === 'changed') {
-      return getInventoryFieldState(fieldDefinition, editorDraft, defaultValues) === 'changed';
-    }
-
-    if (inventoryFilter === 'assets') {
-      return isAssetMsStoreField(fieldDefinition);
-    }
-
-    if (inventoryFilter === 'longText') {
-      return isLongTextMsStoreField(fieldDefinition);
-    }
-
-    return true;
-  }), [defaultValues, editorDraft, inventoryFilter, normalizedQuery]);
-
-  const statusBadge = loadStatus === 'loading'
-    ? t('msStore.loading')
-    : loadStatus === 'failed'
-      ? t('msStore.loadFailed')
-      : null;
-
-  const localeOptions = useMemo(() => supportedMsStoreLanguages.map((locale) => ({
-    value: locale,
-    label: getMsStoreLanguageLabel(locale),
-  })), []);
-
-  const inventoryFilters: Array<{ id: InventoryFilter; label: string }> = [
-    { id: 'all', label: t('msStore.inventory.filters.all') },
-    { id: 'empty', label: t('msStore.inventory.filters.empty') },
-    { id: 'changed', label: t('msStore.inventory.filters.changed') },
-    { id: 'assets', label: t('msStore.inventory.filters.assets') },
-    { id: 'longText', label: t('msStore.inventory.filters.longText') },
-  ];
-
-  const updateDraftField = (field: EditableDraftFieldKey, value: string) => {
-    setEditorDraft((currentDraft) => {
-      if (!currentDraft) {
-        return currentDraft;
-      }
-
-      const nextDraft: MsStoreDataDraft = {
-        ...currentDraft,
-        [field]: value,
-      };
-
-      const coreFieldId = field === 'title'
-        ? msStoreCoreFieldIds.title
-        : field === 'subtitle'
-          ? msStoreCoreFieldIds.subtitle
-          : field === 'shortDescription'
-            ? msStoreCoreFieldIds.shortDescription
-            : field === 'description'
-              ? msStoreCoreFieldIds.description
-              : null;
-
-      nextDraft.fieldValues = coreFieldId
-        ? syncDraftFieldValue(currentDraft.fieldValues, coreFieldId, value)
-        : { ...currentDraft.fieldValues };
-
-      return nextDraft;
-    });
-  };
-
-  const updateDraftInventoryField = (fieldId: string, value: string) => {
-    setEditorDraft((currentDraft) => {
-      if (!currentDraft) {
-        return currentDraft;
-      }
-
-      const nextDraft: MsStoreDataDraft = {
-        ...currentDraft,
-        fieldValues: syncDraftFieldValue(currentDraft.fieldValues, fieldId, value),
-      };
-
-      if (fieldId === msStoreCoreFieldIds.title) {
-        nextDraft.title = value;
-      }
-
-      if (fieldId === msStoreCoreFieldIds.subtitle) {
-        nextDraft.subtitle = value;
-      }
-
-      if (fieldId === msStoreCoreFieldIds.shortDescription) {
-        nextDraft.shortDescription = value;
-      }
-
-      if (fieldId === msStoreCoreFieldIds.description) {
-        nextDraft.description = value;
-      }
-
-      return nextDraft;
-    });
-  };
-
-  const handleCreateDraft = (overrides?: Partial<Pick<MsStoreDataDraft, 'locale' | 'market'>>) => {
-    const nextDraft = createEmptyDraft(currentProduct.productStorageId);
-
-    setEditorDraft({
-      ...nextDraft,
-      locale: overrides?.locale ?? nextDraft.locale,
-      market: overrides?.market ?? nextDraft.market,
-    });
-  };
-
-  const handleSelectLocaleGroup = (locale: string) => {
-    const localeKey = normalizeLocaleKey(locale);
-    const group = visibleLocaleGroups.find((candidate) => candidate.key === localeKey);
-
-    if (!group || group.entries.length === 0) {
-      handleCreateDraft({ locale });
-      return;
-    }
-
-    const preferredEntry = group.entries.find((entry) => normalizeMarketKey(entry.market) === normalizeMarketKey(editorDraft?.market ?? '')) ?? group.entries[0];
-    onSelectEntry(preferredEntry.id);
-  };
-
-  const handleUseMarket = (market: string) => {
-    const normalizedLocale = activeLocale || editorDraft?.locale || '';
-    const existingEntry = entries.find((entry) => (
-      normalizeLocaleKey(entry.locale) === normalizeLocaleKey(normalizedLocale)
-      && normalizeMarketKey(entry.market) === normalizeMarketKey(market)
-    ));
-
-    if (existingEntry) {
-      onSelectEntry(existingEntry.id);
-      return;
-    }
-
-    if (!activeSelectedEntryId) {
-      if (normalizedLocale) {
-        updateDraftField('locale', normalizedLocale);
-      }
-      updateDraftField('market', market);
-      return;
-    }
-
-    handleCreateDraft({ locale: normalizedLocale, market });
-  };
-
-  const handleDeleteDraft = () => {
-    if (!editorDraft) {
-      return;
-    }
-
-    if (!persistedEntryIds.has(editorDraft.id)) {
-      onResetDraft();
-      return;
-    }
-
-    onSelectEntry(editorDraft.id);
-    onDeleteEntry();
-  };
-
-  const handleSaveDraft = () => {
-    if (!editorDraft) {
-      return;
-    }
-
-    onSaveDraft(cloneMsStoreDraft(editorDraft) ?? editorDraft);
-  };
 
   return (
     <div className="grid min-h-0 gap-4">
@@ -775,10 +482,6 @@ export function ProductProfilePage({
                 <Button onClick={onExport} type="button" variant="outline">
                   <FileDown className="size-4" />
                   {t('msStore.exportAction')}
-                </Button>
-                <Button onClick={() => handleCreateDraft()} type="button">
-                  <Plus className="size-4" />
-                  {t('msStore.addEntry')}
                 </Button>
               </div>
             </div>
@@ -876,7 +579,6 @@ export function ProductProfilePage({
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                       <span>{t('msStore.localeRecordsLabel', { count: group.entries.length })}</span>
-                      <span>{t('msStore.localeMarketsLabel', { count: group.marketCount })}</span>
                       <span className="font-mono">{group.latestUpdatedAt}</span>
                     </div>
                   </button>
@@ -893,7 +595,7 @@ export function ProductProfilePage({
               <div className="mt-3 grid gap-2 text-sm">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-muted-foreground">{t('msStore.coverageRequired')}</span>
-                  <span className="font-medium text-foreground">{requiredFilledCount} / 4</span>
+                  <span className="font-medium text-foreground">{requiredFilledCount} / 3</span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-muted-foreground">{t('msStore.coverageChanged')}</span>
@@ -931,96 +633,36 @@ export function ProductProfilePage({
                 <p className="text-sm text-muted-foreground">{t('msStore.overviewDescription')}</p>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,14rem)_minmax(0,13rem)_minmax(0,1fr)]">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
                 <label className="grid gap-2">
                   <span className="text-sm font-medium text-foreground">{t('msStore.form.localeLabel')}</span>
                   <select
-                    aria-invalid={visibleFieldErrors.locale ? 'true' : 'false'}
+                    aria-invalid={fieldErrors.locale ? 'true' : 'false'}
                     aria-label={t('msStore.form.localeLabel')}
                     className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15"
-                    onChange={(event) => updateDraftField('locale', event.target.value)}
-                    value={editorDraft?.locale ?? ''}
+                    onChange={(event) => onDraftFieldChange('locale', event.target.value)}
+                    value={draft?.locale ?? ''}
                   >
                     <option value="">{t('msStore.form.localePlaceholder')}</option>
                     {localeOptions.map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>
-                  {visibleFieldErrors.locale ? <span className="text-sm text-destructive">{t(visibleFieldErrors.locale)}</span> : null}
+                  {fieldErrors.locale ? <span className="text-sm text-destructive">{t(fieldErrors.locale)}</span> : null}
                 </label>
-
-                <label className="grid gap-2">
-                  <span className="text-sm font-medium text-foreground">{t('msStore.form.marketLabel')}</span>
-                  <Input
-                    aria-invalid={visibleFieldErrors.market ? 'true' : 'false'}
-                    aria-label={t('msStore.form.marketLabel')}
-                    list="msstore-market-options"
-                    onChange={(event) => updateDraftField('market', event.target.value)}
-                    placeholder={t('msStore.form.marketPlaceholder')}
-                    value={editorDraft?.market ?? ''}
-                  />
-                  {visibleFieldErrors.market ? <span className="text-sm text-destructive">{t(visibleFieldErrors.market)}</span> : null}
-                </label>
-
-                <label className="grid gap-2">
-                  <span className="text-sm font-medium text-foreground">{t('msStore.form.storeIdLabel')}</span>
-                  <Input
-                    aria-invalid={visibleFieldErrors.storeId ? 'true' : 'false'}
-                    aria-label={t('msStore.form.storeIdLabel')}
-                    className="font-mono"
-                    onChange={(event) => updateDraftField('storeId', event.target.value)}
-                    placeholder={t('msStore.form.storeIdPlaceholder')}
-                    value={editorDraft?.storeId ?? ''}
-                  />
-                  {visibleFieldErrors.storeId ? <span className="text-sm text-destructive">{t(visibleFieldErrors.storeId)}</span> : null}
-                </label>
-              </div>
-
-              <datalist id="msstore-market-options">
-                {marketSuggestions.map((market) => (
-                  <option key={market} value={market} />
-                ))}
-              </datalist>
-
-              <div className="grid gap-2">
-                <span className="text-sm font-medium text-foreground">{t('msStore.marketRecordsTitle')}</span>
-                <div className="flex flex-wrap gap-2">
-                  {marketSuggestions.length > 0 ? marketSuggestions.map((market) => {
-                    const marketEntry = localeEntries.find((entry) => normalizeMarketKey(entry.market) === normalizeMarketKey(market));
-                    const isSelected = normalizeMarketKey(editorDraft?.market ?? '') === normalizeMarketKey(market);
-
-                    return (
-                      <button
-                        aria-label={`${t('msStore.form.marketLabel')} ${market}`}
-                        className={cn(
-                          'inline-flex min-h-9 items-center gap-2 rounded-md border px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/20',
-                          isSelected ? 'border-primary/35 bg-primary/8 text-foreground' : 'border-border bg-background text-muted-foreground hover:bg-accent/55 hover:text-foreground',
-                        )}
-                        key={market}
-                        onClick={() => handleUseMarket(market)}
-                        type="button"
-                      >
-                        <span>{market}</span>
-                        <Badge variant="outline">{marketEntry ? t('msStore.marketRecordExisting') : t('msStore.marketRecordNew')}</Badge>
-                      </button>
-                    );
-                  }) : (
-                    <p className="text-sm text-muted-foreground">{t('msStore.marketRecordsEmpty')}</p>
-                  )}
-                </div>
               </div>
 
               <label className="grid gap-2">
                 <span className="text-sm font-medium text-foreground">{t('msStore.form.keywordsLabel')}</span>
                 <Input
-                  aria-invalid={visibleFieldErrors.keywords ? 'true' : 'false'}
+                  aria-invalid={fieldErrors.keywords ? 'true' : 'false'}
                   aria-label={t('msStore.form.keywordsLabel')}
-                  onChange={(event) => updateDraftField('keywordsText', event.target.value)}
+                  onChange={(event) => onDraftFieldChange('keywordsText', event.target.value)}
                   placeholder={t('msStore.form.keywordsPlaceholder')}
-                  value={editorDraft?.keywordsText ?? ''}
+                  value={draft?.keywordsText ?? ''}
                 />
                 <p className="text-xs text-muted-foreground">{t('msStore.form.keywordsHint')}</p>
-                {visibleFieldErrors.keywords ? <span className="text-sm text-destructive">{t(visibleFieldErrors.keywords)}</span> : null}
+                {fieldErrors.keywords ? <span className="text-sm text-destructive">{t(fieldErrors.keywords)}</span> : null}
               </label>
             </section>
 
@@ -1041,10 +683,10 @@ export function ProductProfilePage({
                 </div>
 
                 {[
-                  { error: visibleFieldErrors.title, fieldId: msStoreCoreFieldIds.title, key: 'title' as const, label: t('msStore.form.titleLabel'), placeholder: t('msStore.form.titlePlaceholder') },
+                  { error: fieldErrors.title, fieldId: msStoreCoreFieldIds.title, key: 'title' as const, label: t('msStore.form.titleLabel'), placeholder: t('msStore.form.titlePlaceholder') },
                   { error: undefined, fieldId: msStoreCoreFieldIds.subtitle, key: 'subtitle' as const, label: t('msStore.form.subtitleLabel'), placeholder: t('msStore.form.subtitlePlaceholder') },
-                  { error: visibleFieldErrors.shortDescription, fieldId: msStoreCoreFieldIds.shortDescription, key: 'shortDescription' as const, label: t('msStore.form.shortDescriptionLabel'), placeholder: t('msStore.form.shortDescriptionPlaceholder') },
-                  { error: visibleFieldErrors.description, fieldId: msStoreCoreFieldIds.description, key: 'description' as const, label: t('msStore.form.descriptionLabel'), placeholder: t('msStore.form.descriptionPlaceholder') },
+                  { error: fieldErrors.shortDescription, fieldId: msStoreCoreFieldIds.shortDescription, key: 'shortDescription' as const, label: t('msStore.form.shortDescriptionLabel'), placeholder: t('msStore.form.shortDescriptionPlaceholder') },
+                  { error: fieldErrors.description, fieldId: msStoreCoreFieldIds.description, key: 'description' as const, label: t('msStore.form.descriptionLabel'), placeholder: t('msStore.form.descriptionPlaceholder') },
                 ].map((coreField) => {
                   const fieldDefinition = msStoreFieldRegistry.find((candidate) => candidate.id === coreField.fieldId);
 
@@ -1061,9 +703,9 @@ export function ProductProfilePage({
                       fieldKey={coreField.key}
                       key={coreField.fieldId}
                       label={coreField.label}
-                      localeValue={editorDraft?.[coreField.key] ?? ''}
+                      localeValue={draft?.[coreField.key] ?? ''}
                       onDefaultFieldChange={onDefaultFieldChange}
-                      onDraftFieldChange={updateDraftField}
+                      onDraftFieldChange={onDraftFieldChange}
                       placeholder={coreField.placeholder}
                     />
                   );
@@ -1116,7 +758,7 @@ export function ProductProfilePage({
                     </div>
 
                     {inventoryFields.map((fieldDefinition) => {
-                      const fieldState = getInventoryFieldState(fieldDefinition, editorDraft, defaultValues);
+                      const fieldState = getInventoryFieldState(fieldDefinition, draft, defaultValues);
 
                       return (
                         <InventoryFieldRow
@@ -1125,9 +767,9 @@ export function ProductProfilePage({
                           fieldStateLabel={t(`msStore.inventory.fieldState.${fieldState}`)}
                           key={fieldDefinition.id}
                           localeLabel={currentLocaleLabel}
-                          localeValue={editorDraft?.fieldValues[fieldDefinition.id] ?? ''}
+                          localeValue={draft?.fieldValues[fieldDefinition.id] ?? ''}
                           onDefaultFieldChange={onDefaultFieldChange}
-                          onDraftInventoryFieldChange={updateDraftInventoryField}
+                          onDraftInventoryFieldChange={onDraftInventoryFieldChange}
                         />
                       );
                     })}
@@ -1139,15 +781,11 @@ export function ProductProfilePage({
             </section>
 
             <div className="flex flex-wrap justify-end gap-3 border-t border-border/70 pt-4">
-              <Button onClick={handleDeleteDraft} type="button" variant="outline">
-                <Trash2 className="size-4" />
-                {t('msStore.deleteAction')}
-              </Button>
               <Button onClick={onResetDraft} type="button" variant="outline">
                 <RotateCcw className="size-4" />
                 {t('msStore.resetAction')}
               </Button>
-              <Button onClick={handleSaveDraft} type="button">
+              <Button onClick={onSaveDraft} type="button">
                 <Save className="size-4" />
                 {t('msStore.saveAction')}
               </Button>
@@ -1176,14 +814,12 @@ export function ProductProfilePage({
                   <span className="text-muted-foreground">{t('msStore.localeRecordsStat')}</span>
                   <span className="font-medium text-foreground">{localeRecordCount}</span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">{t('msStore.localeMarketsStat')}</span>
-                  <span className="font-medium text-foreground">{localeMarkets.length}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">{t('msStore.localeMarketActive')}</span>
-                  <span className="font-medium text-foreground">{editorDraft?.market || '-'}</span>
-                </div>
+                {activeEntry ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">{t('msStore.table.updated')}</span>
+                    <span className="font-mono text-foreground">{activeEntry.updatedAt}</span>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -1196,17 +832,6 @@ export function ProductProfilePage({
                     <span>{filter.id === inventoryFilter ? '●' : '○'}</span>
                   </div>
                 ))}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-border/70 bg-background px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('msStore.marketRecordsTitle')}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {localeMarkets.length > 0 ? localeMarkets.map((market) => (
-                  <Badge key={market} variant={normalizeMarketKey(editorDraft?.market ?? '') === normalizeMarketKey(market) ? 'default' : 'secondary'}>
-                    {market}
-                  </Badge>
-                )) : <span className="text-sm text-muted-foreground">{t('msStore.marketRecordsEmpty')}</span>}
               </div>
             </div>
 

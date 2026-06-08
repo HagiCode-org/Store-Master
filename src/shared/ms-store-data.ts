@@ -127,8 +127,6 @@ export interface MsStoreDataEntry {
   id: string;
   productStorageId: string;
   locale: string;
-  market: string;
-  storeId: string;
   keywords: string[];
   fieldValues: Record<string, string>;
   createdAt: string;
@@ -144,8 +142,6 @@ export interface MsStoreDataDataset {
 
 export interface MsStoreDataValidationErrors {
   locale?: string;
-  market?: string;
-  storeId?: string;
   title?: string;
   shortDescription?: string;
   description?: string;
@@ -210,8 +206,6 @@ interface ParsedMsStoreCsvRow {
   index: number;
   values: Record<SupportedMsStoreCsvLanguage, string>;
 }
-
-const storeIdPattern = /^[A-Za-z0-9-]{3,64}$/;
 
 function fallbackUuid(): string {
   return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}-${Math.random().toString(16).slice(2, 10)}`;
@@ -364,8 +358,6 @@ export function createEmptyMsStoreDataEntry(productStorageId: string): MsStoreDa
     id: generateMsStoreEntryId(),
     productStorageId,
     locale: '',
-    market: '',
-    storeId: '',
     keywords: [],
     fieldValues: {},
     createdAt: timestamp,
@@ -387,7 +379,7 @@ export function getMsStoreEntryCoreFieldValue(entry: Pick<MsStoreDataEntry, 'fie
 }
 
 export function validateMsStoreDataEntry(
-  entry: Pick<MsStoreDataEntry, 'locale' | 'market' | 'storeId' | 'keywords' | 'fieldValues'>,
+  entry: Pick<MsStoreDataEntry, 'locale' | 'keywords' | 'fieldValues'>,
 ): MsStoreDataValidationErrors {
   const errors: MsStoreDataValidationErrors = {};
 
@@ -395,16 +387,6 @@ export function validateMsStoreDataEntry(
     errors.locale = 'validation.msStore.localeRequired';
   } else if (!isSupportedMsStoreLanguage(entry.locale.trim())) {
     errors.locale = 'validation.msStore.localeUnsupported';
-  }
-
-  if (entry.market.trim().length === 0) {
-    errors.market = 'validation.msStore.marketRequired';
-  }
-
-  if (entry.storeId.trim().length === 0) {
-    errors.storeId = 'validation.msStore.storeIdRequired';
-  } else if (!storeIdPattern.test(entry.storeId.trim())) {
-    errors.storeId = 'validation.msStore.storeIdFormat';
   }
 
   if (getMsStoreEntryCoreFieldValue(entry, 'title').trim().length === 0) {
@@ -447,8 +429,6 @@ function normalizeMsStoreDataEntry(input: unknown, productStorageId: string): Ms
     id: typeof candidate.id === 'string' && candidate.id.trim().length > 0 ? candidate.id : generateMsStoreEntryId(),
     productStorageId,
     locale: normalizeLocale(candidate.locale),
-    market: typeof candidate.market === 'string' ? candidate.market.trim() : '',
-    storeId: typeof candidate.storeId === 'string' ? candidate.storeId.trim() : '',
     keywords: normalizeKeywords(candidate.keywords),
     fieldValues,
     createdAt: typeof candidate.createdAt === 'string' && candidate.createdAt.trim().length > 0 ? candidate.createdAt : createTimestampLabel(),
@@ -458,8 +438,8 @@ function normalizeMsStoreDataEntry(input: unknown, productStorageId: string): Ms
   return normalized;
 }
 
-function createDuplicateKey(entry: Pick<MsStoreDataEntry, 'locale' | 'market'>): string {
-  return `${entry.locale.trim().toLowerCase()}::${entry.market.trim().toLowerCase()}`;
+function createDuplicateKey(entry: Pick<MsStoreDataEntry, 'locale'>): string {
+  return entry.locale.trim().toLowerCase();
 }
 
 export function validateMsStoreDataDataset(dataset: MsStoreDataDataset): MsStoreDataImportError[] {
@@ -514,7 +494,7 @@ export function validateMsStoreDataDataset(dataset: MsStoreDataDataset): MsStore
       errors.push({
         field: 'dataset',
         index,
-        messageKey: 'validation.msStore.duplicateLocaleMarket',
+        messageKey: 'validation.msStore.duplicateLocale',
       });
       return;
     }
@@ -737,10 +717,6 @@ function createMsStoreCsvRows(dataset: MsStoreDataDataset): string[][] | null {
 }
 
 export function getMsStoreDataExportError(dataset: MsStoreDataDataset): string | null {
-  if (validateMsStoreDataDataset(dataset).length > 0) {
-    return 'validation.msStore.exportInvalidWorkspace';
-  }
-
   const localeEntryMap = new Set<SupportedMsStoreCsvLanguage>();
 
   for (const entry of dataset.entries) {
@@ -755,6 +731,10 @@ export function getMsStoreDataExportError(dataset: MsStoreDataDataset): string |
     }
 
     localeEntryMap.add(csvLanguage);
+  }
+
+  if (validateMsStoreDataDataset(dataset).length > 0) {
+    return 'validation.msStore.exportInvalidWorkspace';
   }
 
   return null;

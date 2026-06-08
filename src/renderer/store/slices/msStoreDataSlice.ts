@@ -23,8 +23,6 @@ export interface MsStoreDataDraft {
   id: string;
   productStorageId: string;
   locale: string;
-  market: string;
-  storeId: string;
   title: string;
   subtitle: string;
   shortDescription: string;
@@ -81,14 +79,13 @@ function findEntry(entries: MsStoreDataEntry[], entryId: string): MsStoreDataEnt
   return entries.find((entry) => entry.id === entryId) ?? null;
 }
 
-function hasDuplicateLocaleMarket(entries: MsStoreDataEntry[], entry: MsStoreDataEntry): boolean {
+function hasDuplicateLocale(entries: MsStoreDataEntry[], entry: MsStoreDataEntry): boolean {
   return entries.some((item) => {
     if (item.id === entry.id) {
       return false;
     }
 
-    return item.locale.trim().toLowerCase() === entry.locale.trim().toLowerCase()
-      && item.market.trim().toLowerCase() === entry.market.trim().toLowerCase();
+    return item.locale.trim().toLowerCase() === entry.locale.trim().toLowerCase();
   });
 }
 
@@ -136,8 +133,6 @@ function normalizeDraft(draft: MsStoreDataDraft): MsStoreDataEntry {
     id: draft.id,
     productStorageId: draft.productStorageId,
     locale: normalizeSupportedMsStoreLanguage(draft.locale) ?? draft.locale.trim(),
-    market: draft.market.trim(),
-    storeId: draft.storeId.trim(),
     keywords: normalizeKeywords(draft.keywordsText),
     fieldValues,
     createdAt: draft.createdAt,
@@ -269,7 +264,7 @@ const msStoreDataSlice = createSlice({
     },
     updateMsStoreDraftField(
       state,
-      action: PayloadAction<{ field: keyof Pick<MsStoreDataDraft, 'locale' | 'market' | 'storeId' | 'title' | 'subtitle' | 'shortDescription' | 'description' | 'keywordsText'>; value: string }>,
+      action: PayloadAction<{ field: keyof Pick<MsStoreDataDraft, 'locale' | 'title' | 'subtitle' | 'shortDescription' | 'description' | 'keywordsText'>; value: string }>,
     ) {
       if (!state.draft) {
         return;
@@ -358,8 +353,8 @@ const msStoreDataSlice = createSlice({
       const normalizedEntry = normalizeDraft(state.draft);
       const fieldErrors = validateMsStoreDataEntry(normalizedEntry);
 
-      if (hasDuplicateLocaleMarket(state.entries, normalizedEntry)) {
-        fieldErrors.market = 'validation.msStore.duplicateLocaleMarket';
+      if (hasDuplicateLocale(state.entries, normalizedEntry)) {
+        fieldErrors.locale = 'validation.msStore.duplicateLocale';
       }
 
       state.fieldErrors = fieldErrors;

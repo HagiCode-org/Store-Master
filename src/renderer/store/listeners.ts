@@ -133,7 +133,7 @@ export function registerStoreListeners(): void {
 
       syncSectionData(listenerApi.dispatch, state);
 
-      if (state.navigation.activeSection === 'product-profile') {
+      if (state.navigation.activeSection === 'product-profile' || state.navigation.activeSection === 'languages') {
         syncMsStoreDataForActiveProduct(listenerApi.dispatch, state);
       }
     },
@@ -179,7 +179,7 @@ export function registerStoreListeners(): void {
     effect: async (_, listenerApi) => {
       const state = listenerApi.getState();
 
-      if (state.navigation.activeSection !== 'product-profile') {
+      if (state.navigation.activeSection !== 'product-profile' && state.navigation.activeSection !== 'languages') {
         return;
       }
 
