@@ -23,7 +23,9 @@ import {
   saveMsStoreDraft,
   selectMsStoreEntry,
   startNewMsStoreEntry,
+  updateMsStoreDefaultFieldValue,
   updateMsStoreDraftField,
+  updateMsStoreDraftInventoryField,
 } from '@/store/slices/msStoreDataSlice';
 import {
   createProduct,
@@ -55,6 +57,7 @@ export default function App() {
   const loadStatus = useAppSelector((state) => state.productManagement.loadStatus);
   const supportedMarkets = useAppSelector((state) => state.productManagement.supportedMarkets);
   const msStoreDraft = useAppSelector((state) => state.msStoreData.draft);
+  const msStoreDefaultValues = useAppSelector((state) => state.msStoreData.defaultValues);
   const msStoreEntries = useAppSelector((state) => state.msStoreData.entries);
   const msStoreSelectedEntryId = useAppSelector((state) => state.msStoreData.selectedEntryId);
   const msStoreFieldErrors = useAppSelector((state) => state.msStoreData.fieldErrors);
@@ -146,6 +149,7 @@ export default function App() {
     content = (
       <ProductProfilePage
         currentProduct={currentProduct}
+        defaultValues={msStoreDefaultValues}
         draft={msStoreDraft}
         entries={msStoreEntries}
         exportError={msStoreExportError}
@@ -159,8 +163,10 @@ export default function App() {
         loadStatus={msStoreLoadStatus}
         onAddEntry={() => dispatch(startNewMsStoreEntry())}
         onClearMessages={() => dispatch(clearMsStoreMessages())}
+        onDefaultFieldChange={(fieldId, value) => dispatch(updateMsStoreDefaultFieldValue({ fieldId, value }))}
         onDeleteEntry={() => dispatch(deleteSelectedMsStoreEntry())}
         onDraftFieldChange={(field, value) => dispatch(updateMsStoreDraftField({ field, value }))}
+        onDraftInventoryFieldChange={(fieldId, value) => dispatch(updateMsStoreDraftInventoryField({ fieldId, value }))}
         onExport={() => {
           if (!currentProduct) {
             return;
@@ -170,6 +176,8 @@ export default function App() {
             productStorageId: currentProduct.productStorageId,
             dataset: {
               productStorageId: currentProduct.productStorageId,
+              version: 2,
+              defaultValues: msStoreDefaultValues,
               entries: msStoreEntries,
             },
           }));

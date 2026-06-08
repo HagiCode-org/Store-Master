@@ -11,6 +11,8 @@ import {
   importMsStoreData,
   loadMsStoreData,
   saveMsStoreDraft,
+  selectMsStoreDataset,
+  updateMsStoreDefaultFieldValue,
 } from './slices/msStoreDataSlice';
 import { setActiveSection } from './slices/navigationSlice';
 import {
@@ -192,20 +194,18 @@ export function registerStoreListeners(): void {
       }
 
       const entriesChanged = previousState.msStoreData.entries !== currentState.msStoreData.entries;
-      return entriesChanged && (
-        saveMsStoreDraft.match(action)
-        || deleteSelectedMsStoreEntry.match(action)
+      const defaultsChanged = previousState.msStoreData.defaultValues !== currentState.msStoreData.defaultValues;
+
+      return (
+        ((saveMsStoreDraft.match(action) || updateMsStoreDefaultFieldValue.match(action)) && (entriesChanged || defaultsChanged))
+        || (deleteSelectedMsStoreEntry.match(action) && entriesChanged)
         || (importMsStoreData.fulfilled.match(action) && action.payload.success)
       );
     },
     effect: async (_, listenerApi) => {
-      const state = listenerApi.getState();
-
       try {
-        await window.storeMaster.writeMsStoreData(state.msStoreData.activeProductStorageId, {
-          productStorageId: state.msStoreData.activeProductStorageId,
-          entries: state.msStoreData.entries,
-        });
+        const state = listenerApi.getState();
+        await window.storeMaster.writeMsStoreData(state.msStoreData.activeProductStorageId, selectMsStoreDataset(state));
       } catch (error) {
         console.error('[store-master] Failed to persist MS Store data after dataset change.', error);
       }
