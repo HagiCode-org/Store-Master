@@ -9,6 +9,7 @@ import {
   RotateCcw,
   Save,
   Search,
+  Trash2,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/badge';
@@ -34,6 +35,7 @@ import {
   isLongTextMsStoreField,
   msStoreCoreFieldIds,
   msStoreFieldRegistry,
+  supportedMsStoreLanguages,
   type MsStoreDataEntry,
   type MsStoreFieldDefinition,
 } from '../../../shared/ms-store-data';
@@ -58,9 +60,12 @@ interface ProductProfilePageProps {
   loadError: string | null;
   loadStatus: 'idle' | 'loading' | 'succeeded' | 'failed';
   onClearMessages: () => void;
+  onCreateLanguage: (locale: string) => void;
   onDraftFieldChange: (field: EditableDraftFieldKey, value: string) => void;
   onDraftInventoryFieldChange: (fieldId: string, value: string) => void;
+  onDeleteEntry: (entryId: string) => void;
   onExport: () => void;
+  onFillDraftFromEntry: (entryId: string) => void;
   onImport: () => void;
   onOpenProducts: () => void;
   onResetDraft: () => void;
@@ -329,9 +334,12 @@ export function ProductProfilePage({
   loadError,
   loadStatus,
   onClearMessages,
+  onCreateLanguage,
   onDraftFieldChange,
   onDraftInventoryFieldChange,
+  onDeleteEntry,
   onExport,
+  onFillDraftFromEntry,
   onImport,
   onOpenProducts,
   onResetDraft,
@@ -343,7 +351,9 @@ export function ProductProfilePage({
 }: ProductProfilePageProps) {
   const { t } = useTranslation();
   const [fieldQuery, setFieldQuery] = useState('');
+  const [fillSourceEntryId, setFillSourceEntryId] = useState<string | null>(null);
   const [inventoryFilter, setInventoryFilter] = useState<InventoryFilter>('all');
+  const [newLocale, setNewLocale] = useState<string | null>(null);
   const [activeNavigatorSection, setActiveNavigatorSection] = useState<EditorSectionId>('core-fields');
   const deferredFieldQuery = useDeferredValue(fieldQuery);
   const sectionRefs = useRef<Partial<Record<EditorSectionId, HTMLElement | null>>>({});
@@ -358,6 +368,7 @@ export function ProductProfilePage({
   const activeSelectedEntryId = draft && persistedEntryIds.has(draft.id) ? draft.id : '';
   const localeGroups = useMemo(() => buildLocaleGroups(entries, t('msStore.untitledEntry')), [entries, t]);
   const draftLocale = draft?.locale.trim() ?? '';
+  const unsavedDraftLocale = draft && !persistedEntryIds.has(draft.id) ? draftLocale : '';
   const defaultLocale = currentProduct?.relatedMarkets.msStore.defaultLanguage ?? '';
   const draftIsDefaultLocale = defaultLocale.length > 0 && draftLocale === defaultLocale;
   const defaultEntry = draftIsDefaultLocale
@@ -378,6 +389,34 @@ export function ProductProfilePage({
   const activeLocaleKey = normalizeLocaleKey(activeLocale);
   const currentLocaleLabel = activeLocale ? getMsStoreLanguageLabel(activeLocale) : t('msStore.inventory.noLocaleSelected');
   const defaultLocaleLabel = defaultLocale ? getMsStoreLanguageLabel(defaultLocale) : t('msStore.inventory.noLocaleSelected');
+  const availableLocaleOptions = useMemo(() => {
+    const usedLocaleKeys = new Set(localeGroups.map((group) => normalizeLocaleKey(group.locale)));
+
+    if (unsavedDraftLocale) {
+      usedLocaleKeys.add(normalizeLocaleKey(unsavedDraftLocale));
+    }
+
+    return sortLocaleValues(
+      supportedMsStoreLanguages.filter((locale) => !usedLocaleKeys.has(normalizeLocaleKey(locale))),
+    ).map((locale) => ({
+      value: locale,
+      label: getMsStoreLanguageLabel(locale),
+      description: locale,
+    }));
+  }, [localeGroups, unsavedDraftLocale]);
+  const selectedNewLocale = newLocale && availableLocaleOptions.some((option) => option.value === newLocale)
+    ? newLocale
+    : availableLocaleOptions[0]?.value ?? null;
+  const fillSourceOptions = useMemo(() => localeGroups
+    .filter((group) => group.entries.length > 0 && group.key !== activeLocaleKey)
+    .map((group) => ({
+      value: group.entries[0].id,
+      label: getMsStoreLanguageLabel(group.locale),
+      description: group.locale,
+    })), [activeLocaleKey, localeGroups]);
+  const selectedFillSourceEntryId = fillSourceEntryId && fillSourceOptions.some((option) => option.value === fillSourceEntryId)
+    ? fillSourceEntryId
+    : fillSourceOptions[0]?.value ?? null;
   const requiredFilledCount = requiredFieldIds
     .map((fieldId) => ((draft?.fieldValues[fieldId] ?? '').trim().length > 0 ? fieldId : null))
     .filter(Boolean).length;
@@ -462,6 +501,23 @@ export function ProductProfilePage({
 
     const preferredEntry = group.entries[0];
     onSelectEntry(preferredEntry.id);
+  };
+
+  const handleCreateLanguage = () => {
+    if (!selectedNewLocale) {
+      return;
+    }
+
+    onCreateLanguage(selectedNewLocale);
+    setNewLocale(null);
+  };
+
+  const handleFillFromOtherLocale = () => {
+    if (!selectedFillSourceEntryId) {
+      return;
+    }
+
+    onFillDraftFromEntry(selectedFillSourceEntryId);
   };
 
   const handleScrollToSection = (sectionId: EditorSectionId) => {
@@ -605,32 +661,86 @@ export function ProductProfilePage({
             </div>
           </CardHeader>
           <CardContent className="grid min-h-0 flex-1 gap-4 overflow-auto pt-4">
+            <div className="grid gap-3 rounded-xl border border-border/70 bg-[color:var(--surface-panel-muted)] px-4 py-3">
+              <div className="grid gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  {t('msStore.addEntry')}
+                </span>
+                <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                  <SearchableSelect
+                    disabled={availableLocaleOptions.length === 0}
+                    emptyMessage={t('msStore.languagesPage.noAvailableLocales')}
+                    onChange={(value) => setNewLocale(value)}
+                    options={availableLocaleOptions}
+                    placeholder={t('msStore.languagesPage.addPlaceholder')}
+                    searchPlaceholder={t('msStore.languagesPage.addSearch')}
+                    value={selectedNewLocale}
+                  />
+                  <Button disabled={!selectedNewLocale} onClick={handleCreateLanguage} type="button">
+                    <Plus className="size-4" />
+                    {t('msStore.addEntry')}
+                  </Button>
+                </div>
+              </div>
+
+              {unsavedDraftLocale ? (
+                <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+                  {t('msStore.languagesPage.unsavedDraftBody', { locale: getMsStoreLanguageLabel(unsavedDraftLocale) })}
+                </div>
+              ) : null}
+            </div>
+
             <div className="grid gap-2">
               {visibleLocaleGroups.length > 0 ? visibleLocaleGroups.map((group) => {
                 const isSelected = group.key === activeLocaleKey;
+                const entry = group.entries[0];
+                const isDefaultLocale = defaultLocale.length > 0 && group.key === normalizeLocaleKey(defaultLocale);
 
                 return (
-                  <button
+                  <div
                     className={cn(
-                      'rounded-xl border px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/20',
+                      'rounded-xl border px-3 py-3 transition-colors',
                       isSelected ? 'border-primary/35 bg-primary/8' : 'border-border/70 bg-background hover:bg-accent/55',
                     )}
                     key={group.key}
-                    onClick={() => handleSelectLocaleGroup(group.locale)}
-                    type="button"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-foreground">{getMsStoreLanguageLabel(group.locale)}</p>
-                        <p className="mt-1 truncate text-xs text-muted-foreground">{group.previewTitle}</p>
-                      </div>
-                      <StatusBadge status={group.status} t={t} />
+                    <div className="flex items-start gap-2">
+                      <button
+                        className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/20"
+                        onClick={() => handleSelectLocaleGroup(group.locale)}
+                        type="button"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground">{getMsStoreLanguageLabel(group.locale)}</p>
+                            <p className="mt-1 truncate text-xs text-muted-foreground">{group.previewTitle}</p>
+                          </div>
+                          <StatusBadge status={group.status} t={t} />
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                          <span>{t('msStore.localeRecordsLabel', { count: group.entries.length })}</span>
+                          {isDefaultLocale ? <Badge variant="secondary">{t('msStore.defaultLanguageBadge')}</Badge> : null}
+                          <span className="font-mono">{group.latestUpdatedAt}</span>
+                        </div>
+                      </button>
+
+                      {entry ? (
+                        <Button
+                          aria-label={`${t('msStore.deleteAction')} ${getMsStoreLanguageLabel(group.locale)}`}
+                          disabled={isDefaultLocale}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onDeleteEntry(entry.id);
+                          }}
+                          size="icon"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      ) : null}
                     </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                      <span>{t('msStore.localeRecordsLabel', { count: group.entries.length })}</span>
-                      <span className="font-mono">{group.latestUpdatedAt}</span>
-                    </div>
-                  </button>
+                  </div>
                 );
               }) : (
                 <div className="rounded-xl border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
@@ -729,6 +839,46 @@ export function ProductProfilePage({
           </CardHeader>
 
           <CardContent className="flex min-h-0 flex-1 flex-col gap-5 overflow-hidden pt-4">
+            <div className="grid gap-3 rounded-xl border border-border/70 bg-[color:var(--surface-panel-muted)] px-4 py-3">
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                  <div className="grid gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      {t('msStore.fillFromLocaleLabel')}
+                    </span>
+                    <SearchableSelect
+                      disabled={fillSourceOptions.length === 0}
+                      emptyMessage={t('msStore.fillFromLocaleEmpty')}
+                      onChange={(value) => setFillSourceEntryId(value)}
+                      options={fillSourceOptions}
+                      placeholder={t('msStore.fillFromLocalePlaceholder')}
+                      searchPlaceholder={t('msStore.fillFromLocaleSearch')}
+                      value={selectedFillSourceEntryId}
+                    />
+                  </div>
+                  <Button
+                    disabled={!selectedFillSourceEntryId}
+                    onClick={handleFillFromOtherLocale}
+                    type="button"
+                    variant="outline"
+                  >
+                    {t('msStore.fillFromLocaleAction')}
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button onClick={onResetDraft} type="button" variant="outline">
+                    <RotateCcw className="size-4" />
+                    {t('msStore.resetAction')}
+                  </Button>
+                  <Button onClick={onSaveDraft} type="button">
+                    <Save className="size-4" />
+                    {t('msStore.saveAction')}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             <div className="min-h-0 flex-1 overflow-y-auto pr-1">
               <div className="grid gap-5 pb-2">
                 <section
@@ -875,16 +1025,6 @@ export function ProductProfilePage({
               </div>
             </div>
 
-            <div className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-border/70 bg-card pt-4">
-              <Button onClick={onResetDraft} type="button" variant="outline">
-                <RotateCcw className="size-4" />
-                {t('msStore.resetAction')}
-              </Button>
-              <Button onClick={onSaveDraft} type="button">
-                <Save className="size-4" />
-                {t('msStore.saveAction')}
-              </Button>
-            </div>
           </CardContent>
         </Card>
       </div>

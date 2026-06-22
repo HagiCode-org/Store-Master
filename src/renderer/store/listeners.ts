@@ -8,6 +8,7 @@ import { fetchRepos, clearRepos } from './slices/githubReposSlice';
 import { fetchAppInfo } from './slices/hubSlice';
 import {
   clearMsStoreWorkspace,
+  deleteMsStoreEntryById,
   deleteSelectedMsStoreEntry,
   importMsStoreData,
   loadMsStoreData,
@@ -154,7 +155,7 @@ export function registerStoreListeners(): void {
 
       syncSectionData(listenerApi.dispatch, state);
 
-      if (state.navigation.activeSection === 'product-profile' || state.navigation.activeSection === 'languages') {
+      if (state.navigation.activeSection === 'product-profile') {
         syncMsStoreDataForActiveProduct(listenerApi.dispatch, state);
       }
     },
@@ -200,7 +201,7 @@ export function registerStoreListeners(): void {
     effect: async (_, listenerApi) => {
       const state = listenerApi.getState();
 
-      if (state.navigation.activeSection !== 'product-profile' && state.navigation.activeSection !== 'languages') {
+      if (state.navigation.activeSection !== 'product-profile') {
         return;
       }
 
@@ -218,6 +219,7 @@ export function registerStoreListeners(): void {
 
       return (
         (saveMsStoreDraft.match(action) && entriesChanged)
+        || (deleteMsStoreEntryById.match(action) && entriesChanged)
         || (deleteSelectedMsStoreEntry.match(action) && entriesChanged)
         || (importMsStoreData.fulfilled.match(action) && action.payload.success)
       );

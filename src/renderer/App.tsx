@@ -1,10 +1,9 @@
 import { useDeferredValue, useEffect, useRef, useState } from 'react';
-import { Boxes, FileStack, Languages, Settings2 } from 'lucide-react';
+import { Boxes, FileStack, Settings2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { AppHeader } from '@/components/navigation/AppHeader';
 import { PrimarySidebar } from '@/components/navigation/PrimarySidebar';
-import { LanguagesPage } from '@/components/products/LanguagesPage';
 import { ProductProfilePage } from '@/components/products/ProductProfilePage';
 import { ProductsPage } from '@/components/products/ProductsPage';
 import { SettingsPage } from '@/components/settings/SettingsPage';
@@ -21,8 +20,9 @@ import { useAppDispatch, useAppSelector } from '@/store';
 import { setActiveSection, toggleSidebarCollapsed } from '@/store/slices/navigationSlice';
 import {
   clearMsStoreMessages,
-  deleteSelectedMsStoreEntry,
+  deleteMsStoreEntryById,
   exportMsStoreData,
+  fillMsStoreDraftFromEntry,
   importMsStoreData,
   resetMsStoreDraft,
   saveMsStoreDraft,
@@ -141,7 +141,6 @@ export default function App() {
 
   const navigationItems = [
     { id: 'products' as const, icon: Boxes, label: t('navigation.products') },
-    { id: 'languages' as const, icon: Languages, label: t('navigation.languages') },
     { id: 'product-profile' as const, icon: FileStack, label: t('navigation.productProfile') },
     { id: 'settings' as const, icon: Settings2, label: t('navigation.settings') },
   ];
@@ -158,6 +157,32 @@ export default function App() {
     setSearchValue('');
     dispatch(createProduct());
     dispatch(setActiveSection('products'));
+  };
+
+  const handleCreateLanguage = (locale: string) => {
+    const normalizedLocale = locale.trim();
+
+    if (!normalizedLocale) {
+      return;
+    }
+
+    if (msStoreDraft?.locale.trim() === normalizedLocale && (!msStoreDraft.id || !msStoreEntries.some((entry) => entry.id === msStoreDraft.id))) {
+      if (activeSection !== 'product-profile') {
+        dispatch(setActiveSection('product-profile'));
+      }
+      return;
+    }
+
+    dispatch(startNewMsStoreEntry());
+    dispatch(updateMsStoreDraftField({ field: 'locale', value: normalizedLocale }));
+
+    if (activeSection !== 'product-profile') {
+      dispatch(setActiveSection('product-profile'));
+    }
+  };
+
+  const handleDeleteLanguage = (entryId: string) => {
+    dispatch(deleteMsStoreEntryById(entryId));
   };
 
   let content = (
@@ -206,6 +231,8 @@ export default function App() {
         onClearMessages={() => dispatch(clearMsStoreMessages())}
         onDraftFieldChange={(field, value) => dispatch(updateMsStoreDraftField({ field, value }))}
         onDraftInventoryFieldChange={(fieldId, value) => dispatch(updateMsStoreDraftInventoryField({ fieldId, value }))}
+        onCreateLanguage={handleCreateLanguage}
+        onDeleteEntry={handleDeleteLanguage}
         onExport={() => {
           if (!currentProduct) {
             return;
@@ -221,6 +248,7 @@ export default function App() {
             },
           }));
         }}
+        onFillDraftFromEntry={(entryId) => dispatch(fillMsStoreDraftFromEntry(entryId))}
         onImport={() => {
           if (!currentProduct) {
             return;
@@ -235,46 +263,6 @@ export default function App() {
         onResetDraft={() => dispatch(resetMsStoreDraft())}
         onSaveDraft={() => dispatch(saveMsStoreDraft())}
         onSelectEntry={(entryId) => dispatch(selectMsStoreEntry(entryId))}
-        onSelectProduct={(productId) => dispatch(selectProduct(productId))}
-        products={products}
-        selectedProductId={selectedProductId}
-      />
-    );
-  }
-
-  if (activeSection === 'languages') {
-    content = (
-      <LanguagesPage
-        currentProduct={currentProduct}
-        draft={msStoreDraft}
-        entries={msStoreEntries}
-        loadError={msStoreLoadError}
-        loadStatus={msStoreLoadStatus}
-        onCreateLanguage={(locale) => {
-          const normalizedLocale = locale.trim();
-
-          if (!normalizedLocale) {
-            return;
-          }
-
-          if (msStoreDraft?.locale.trim() === normalizedLocale && (!msStoreDraft.id || !msStoreEntries.some((entry) => entry.id === msStoreDraft.id))) {
-            dispatch(setActiveSection('product-profile'));
-            return;
-          }
-
-          dispatch(startNewMsStoreEntry());
-          dispatch(updateMsStoreDraftField({ field: 'locale', value: normalizedLocale }));
-          dispatch(setActiveSection('product-profile'));
-        }}
-        onDeleteEntry={(entryId) => {
-          dispatch(selectMsStoreEntry(entryId));
-          dispatch(deleteSelectedMsStoreEntry());
-        }}
-        onEditEntry={(entryId) => {
-          dispatch(selectMsStoreEntry(entryId));
-          dispatch(setActiveSection('product-profile'));
-        }}
-        onOpenProducts={() => dispatch(setActiveSection('products'))}
         onSelectProduct={(productId) => dispatch(selectProduct(productId))}
         products={products}
         selectedProductId={selectedProductId}

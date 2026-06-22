@@ -76,6 +76,17 @@ function createDraftForProduct(productStorageId: string, defaultLocale: Supporte
   return draft;
 }
 
+function copyEntryContentToDraft(draft: MsStoreDataDraft, entry: MsStoreDataEntry): void {
+  const sourceDraft = createDraftFromEntry(entry);
+
+  draft.title = sourceDraft.title;
+  draft.subtitle = sourceDraft.subtitle;
+  draft.shortDescription = sourceDraft.shortDescription;
+  draft.description = sourceDraft.description;
+  draft.fieldValues = { ...sourceDraft.fieldValues };
+  draft.keywordsText = sourceDraft.keywordsText;
+}
+
 function createDatasetFromState(state: MsStoreDataState): MsStoreDataDataset {
   return {
     productStorageId: state.activeProductStorageId,
@@ -288,6 +299,21 @@ const msStoreDataSlice = createSlice({
       state.fieldErrors = {};
       clearStatuses(state);
     },
+    fillMsStoreDraftFromEntry(state, action: PayloadAction<string>) {
+      if (!state.draft) {
+        return;
+      }
+
+      const sourceEntry = findEntry(state.entries, action.payload);
+
+      if (!sourceEntry || sourceEntry.id === state.draft.id) {
+        return;
+      }
+
+      copyEntryContentToDraft(state.draft, sourceEntry);
+      state.fieldErrors = {};
+      clearStatuses(state);
+    },
     updateMsStoreDraftField(
       state,
       action: PayloadAction<{ field: keyof Pick<MsStoreDataDraft, 'locale' | 'title' | 'subtitle' | 'shortDescription' | 'description' | 'keywordsText'>; value: string }>,
@@ -426,6 +452,35 @@ const msStoreDataSlice = createSlice({
       clearStatuses(state);
       hydrateSelection(state);
     },
+    deleteMsStoreEntryById(state, action: PayloadAction<string>) {
+      const entryId = action.payload;
+
+      if (!entryId) {
+        return;
+      }
+
+      const targetEntry = findEntry(state.entries, entryId);
+      if (
+        targetEntry
+        && state.defaultLocale
+        && (normalizeSupportedMsStoreLanguage(targetEntry.locale) ?? targetEntry.locale.trim()) === state.defaultLocale
+      ) {
+        return;
+      }
+
+      const isDeletingCurrentDraft = state.draft?.id === entryId;
+      state.entries = state.entries.filter((entry) => entry.id !== entryId);
+      state.fieldErrors = {};
+      clearStatuses(state);
+
+      if (
+        isDeletingCurrentDraft
+        || !state.draft
+        || (state.selectedEntryId.length > 0 && !findEntry(state.entries, state.selectedEntryId))
+      ) {
+        hydrateSelection(state);
+      }
+    },
     clearMsStoreMessages(state) {
       clearStatuses(state);
     },
@@ -513,7 +568,9 @@ const msStoreDataSlice = createSlice({
 export const {
   clearMsStoreMessages,
   clearMsStoreWorkspace,
+  deleteMsStoreEntryById,
   deleteSelectedMsStoreEntry,
+  fillMsStoreDraftFromEntry,
   resetMsStoreDraft,
   replaceMsStoreDraft,
   saveMsStoreDraft,
