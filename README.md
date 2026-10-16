@@ -24,7 +24,7 @@ A cross-platform desktop application for store management, built with Electron, 
 
 ### Prerequisites
 
-- Node.js 22+
+- Node.js 24+
 - npm 10+
 
 ### Install Dependencies
