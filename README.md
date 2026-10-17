@@ -1,5 +1,8 @@
 # Store Master
 
+[![license](https://img.shields.io/badge/license-MIT-ffd43b)](./LICENSE)
+[![build](https://img.shields.io/github/actions/workflow/status/HagiCode-org/Store-Master/build.yml?branch=main&label=build)](https://github.com/HagiCode-org/Store-Master/actions/workflows/build.yml)
+
 A cross-platform desktop application for store management, built with Electron, React, and TypeScript.
 
 ## Features
