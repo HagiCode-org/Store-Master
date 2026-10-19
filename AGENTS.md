@@ -64,7 +64,7 @@ npm run build:tsc:check
 npm run smoke-test
 ```
 
-`.github/workflows/pr-checks.yml` runs `build:tsc:check`, `build:prod` and `build:linux:dir` on Node 24; `build.yml` builds and releases packages.
+`.github/workflows/pr-checks.yml` runs `build:tsc:check`, `build:prod` and `build:linux:dir` on Node 24; `build.yml` builds and releases packages (pushes to `main`, `v*.*.*` tags, manual dispatch with an optional production-signed build). `release-drafter.yml` drafts the next stable release from Conventional Commits via `.github/scripts/release-notes.mjs`; publishing the draft stays manual. Tests live next to sources (`*.test.ts(x)`, e.g. `src/main/storage/__tests__/`).
 
 ## Key Files
 
