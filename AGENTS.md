@@ -86,7 +86,8 @@ npm run smoke-test
 - **Main Process** (`src/main/`) - Electron main process code
 - **Preload** (`src/preload/`) - Bridge between main and renderer
 - **Renderer** (`src/renderer/`) - React application
-- **Shared** (`src/shared/`) - Shared types and utilities
+- **Shared** (`src/shared/`) - Shared types and utilities, including the Microsoft Store listing model (`ms-store-data.ts`, `ms-store-field-registry.ts`), products and GitHub special repos
+- **Renderer state** (`src/renderer/store/slices/`) - Redux Toolkit slices (e.g. `msStoreDataSlice.ts`, `productManagementSlice.ts`, GitHub account/repo slices)
 - **Storage** (`src/main/storage/`) - JSON file stores under the user data `store/` directory (override with `STORE_MASTER_DATA_DIR`); the repo-level `store/products.json` is checked-in sample data, not the live store
 
 ## UI Components
