@@ -3,91 +3,22 @@
 [![license](https://img.shields.io/badge/license-MIT-ffd43b)](./LICENSE)
 [![build](https://img.shields.io/github/actions/workflow/status/HagiCode-org/Store-Master/build.yml?branch=main&label=build)](https://github.com/HagiCode-org/Store-Master/actions/workflows/build.yml)
 
-A cross-platform desktop application for store management, built with Electron, React, and TypeScript.
+Store Master is a cross-platform desktop app (Windows, macOS, Linux) that gives you one local workspace for managing application store information across markets (Steam and MS Store). See what exists, what is missing and what needs review before a submission.
 
 ## Features
 
-- Cross-platform support (Windows, macOS, Linux)
-- Modern React UI with shadcn/ui components
-- Internationalization support (English, Chinese)
-- Electron Forge for packaging and distribution
-- Tailwind CSS for styling
-- Redux Toolkit for state management
+- Product list: each product carries its related markets (Steam and MS Store), so you can see every product and where it is published
+- Per-language Microsoft Store listing editor: edit title, subtitle, short description, description and the full Microsoft Store field inventory for each listing language
+- Field inventory filters: narrow the field list to empty fields, changed fields, asset fields or long text
+- CSV import and export for Microsoft Store listing data
+- Ten listing languages: en-US, zh-CN, zh-Hant, ja-JP, ko-KR, de-DE, fr-FR, es-ES, pt-BR and ru-RU
+- App interface in English and Chinese
+- Light and dark appearance settings
 
-## Tech Stack
+## Get the App
 
-- **Frontend**: React 19, TypeScript, Tailwind CSS 4
-- **Desktop**: Electron 41
-- **UI Components**: shadcn/ui
-- **State Management**: Redux Toolkit
-- **Build Tools**: Vite 8, Electron Forge
-- **Internationalization**: i18next
-
-## Development
-
-### Prerequisites
-
-- Node.js 24+
-- npm 10+
-
-### Install Dependencies
-
-```bash
-npm install
-```
-
-### Development
-
-```bash
-npm run dev
-```
-
-This will start:
-- Renderer development server on `http://127.0.0.1:38659`
-- TypeScript compiler in watch mode
-- Preload script compiler in watch mode
-- Electron app
-
-### Build
-
-```bash
-# Build all targets
-npm run build:prod
-
-# Build for specific platforms
-npm run build:linux
-npm run build:win
-npm run build:mac
-```
-
-### Type Checking
-
-```bash
-npm run typecheck:main
-npm run typecheck:preload
-npm run typecheck:renderer
-```
-
-## Project Structure
-
-```
-Store-Master/
-├── src/
-│   ├── main/           # Electron main process
-│   ├── preload/        # Preload scripts
-│   ├── renderer/       # React application
-│   │   ├── components/ # React components
-│   │   │   └── ui/     # shadcn/ui components
-│   │   ├── lib/        # Utilities
-│   │   ├── locales/    # Internationalization
-│   │   └── store/      # Redux store
-│   └── shared/         # Shared types and utilities
-├── scripts/            # Build and utility scripts
-├── resources/          # App resources (icons, etc.)
-├── .github/            # GitHub workflows
-└── package.json
-```
+Store Master runs on Windows, macOS and Linux. Installers are published with the [GitHub releases](https://github.com/HagiCode-org/Store-Master/releases) of this repository.
 
 ## License
 
-AGPL-3.0
+MIT. See [LICENSE](./LICENSE).
