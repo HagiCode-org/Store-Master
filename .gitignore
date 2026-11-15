@@ -10,3 +10,6 @@ pkg
 .vscode
 .idea
 src/renderer/locales/generated-locales/
+
+# Local deja session-rule export (auto-extracted from agent sessions; not committed)
+.deja/
